@@ -29,6 +29,9 @@ client.on('connect', () => {
       ign: 1,
       odo: 12045 + step * 0.4,
       fuel: Math.max(10, 80 - step),
+      bat: Math.max(15, 95 - Math.floor(step / 4)),
+      volt: Number((12.8 - step * 0.01).toFixed(2)),
+      ...(step % 9 === 4 ? { evt: 'harsh_brake' } : step % 13 === 7 ? { evt: 'harsh_accel' } : {}),
     };
     client.publish(`telematics/${imei}/telemetry`, JSON.stringify(payload));
     console.log(JSON.stringify(payload));

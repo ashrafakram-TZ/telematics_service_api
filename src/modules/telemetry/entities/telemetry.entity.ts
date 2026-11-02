@@ -1,4 +1,5 @@
 import { Device } from '../../devices/entities/device.entity';
+import { DrivingEvent } from '../dto/telemetry-payload.dto';
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('telemetry')
@@ -37,6 +38,15 @@ export class Telemetry {
 
   @Column({ type: 'real', nullable: true })
   fuel: number | null;
+
+  @Column({ type: 'smallint', nullable: true })
+  battery: number | null;
+
+  @Column({ type: 'real', nullable: true })
+  battery_voltage: number | null;
+
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  event: DrivingEvent | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   received_at: Date;

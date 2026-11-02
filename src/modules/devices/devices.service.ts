@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AppException, listQuery, Paginated } from '../../common';
 import { appConfig, AppConfig } from '../../config/configuration';
-import { deviceState } from './device-state';
+import { deviceState, MOVING_KMPH, vehicleAlerts } from './device-state';
 import { DeviceStatusDto, FleetSummaryDto } from './dto/device-status.dto';
 import { Device } from './entities/device.entity';
 import { CreateDeviceDto } from './dto/create-device.dto';
@@ -25,44 +25,92 @@ export class DevicesService {
       speed: number | null;
       heading: number | null;
       ignition: boolean | null;
-      fuel: number | null;
       recorded_at: Date | null;
+      fuel: number | null;
+      battery: number | null;
+      battery_voltage: number | null;
+      last_moved_at: Date | null;
+      harsh_brake: string;
+      harsh_accel: string;
+      harsh_turn: string;
     })[] = await this.dataSource.query(
-      `SELECT d.id, d.imei, d.name, d.vehicle_no, d.last_seen_at, t.lat, t.lng, t.speed, t.heading, t.ignition, t.fuel, t.recorded_at
+      `SELECT d.id, d.imei, d.name, d.vehicle_no, d.last_seen_at,
+              t.lat, t.lng, t.speed, t.heading, t.ignition, t.recorded_at,
+              f.fuel, b.battery, b.battery_voltage, m.last_moved_at,
+              COALESCE(h.harsh_brake, 0) AS harsh_brake, COALESCE(h.harsh_accel, 0) AS harsh_accel,
+              COALESCE(h.harsh_turn, 0) AS harsh_turn
        FROM devices d
        LEFT JOIN LATERAL (
-         SELECT lat, lng, speed, heading, ignition, fuel, recorded_at FROM telemetry
+         SELECT lat, lng, speed, heading, ignition, recorded_at FROM telemetry
          WHERE device_id = d.id ORDER BY recorded_at DESC LIMIT 1
        ) t ON true
+       LEFT JOIN LATERAL (
+         SELECT fuel FROM telemetry WHERE device_id = d.id AND fuel IS NOT NULL ORDER BY recorded_at DESC LIMIT 1
+       ) f ON true
+       LEFT JOIN LATERAL (
+         SELECT battery, battery_voltage FROM telemetry
+         WHERE device_id = d.id AND (battery IS NOT NULL OR battery_voltage IS NOT NULL)
+         ORDER BY recorded_at DESC LIMIT 1
+       ) b ON true
+       LEFT JOIN LATERAL (
+         SELECT MAX(recorded_at) AS last_moved_at FROM telemetry
+         WHERE device_id = d.id AND speed > $1 AND recorded_at > now() - interval '24 hours'
+       ) m ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) FILTER (WHERE event = 'harsh_brake') AS harsh_brake,
+                COUNT(*) FILTER (WHERE event = 'harsh_accel') AS harsh_accel,
+                COUNT(*) FILTER (WHERE event = 'harsh_turn') AS harsh_turn
+         FROM telemetry
+         WHERE device_id = d.id AND event IS NOT NULL
+           AND recorded_at >= (date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2)
+       ) h ON true
        WHERE d.deleted_at IS NULL AND d.is_active = true
        ORDER BY d.name`,
+      [MOVING_KMPH, this.app.timeZone],
     );
     const now = new Date();
-    const vehicles: DeviceStatusDto[] = rows.map((row) => ({
-      id: Number(row.id),
-      imei: row.imei,
-      name: row.name,
-      vehicle_no: row.vehicle_no,
-      last_seen_at: row.last_seen_at,
-      ...deviceState(row.last_seen_at, row.speed, now, this.app.onlineWindowSeconds),
-      position:
-        row.lat === null || row.lng === null || !row.recorded_at
-          ? null
-          : {
-              lat: row.lat,
-              lng: row.lng,
-              speed: row.speed,
-              heading: row.heading,
-              ignition: row.ignition,
-              fuel: row.fuel,
-              recorded_at: row.recorded_at,
-            },
-    }));
+    const vehicles: DeviceStatusDto[] = rows.map((row) => {
+      const status = deviceState(row.last_seen_at, row.speed, row.ignition, now, this.app.onlineWindowSeconds);
+      const harsh = { brake: Number(row.harsh_brake), accel: Number(row.harsh_accel), turn: Number(row.harsh_turn) };
+      return {
+        id: Number(row.id),
+        imei: row.imei,
+        name: row.name,
+        vehicle_no: row.vehicle_no,
+        last_seen_at: row.last_seen_at,
+        ...status,
+        fuel: row.fuel,
+        battery: row.battery,
+        battery_voltage: row.battery_voltage,
+        stopped_since:
+          status.state === 'idle' || status.state === 'parked' ? (row.last_moved_at ?? row.recorded_at) : null,
+        harsh_today: harsh,
+        alerts: vehicleAlerts(row.fuel, row.battery, harsh),
+        position:
+          row.lat === null || row.lng === null || !row.recorded_at
+            ? null
+            : {
+                lat: row.lat,
+                lng: row.lng,
+                speed: row.speed,
+                heading: row.heading,
+                ignition: row.ignition,
+                recorded_at: row.recorded_at,
+              },
+      };
+    });
+    const count = (state: DeviceStatusDto['state'][]) => vehicles.filter((item) => state.includes(item.state)).length;
     return {
       total: vehicles.length,
-      moving: vehicles.filter((item) => item.state === 'moving').length,
-      idle: vehicles.filter((item) => item.state === 'idle').length,
-      offline: vehicles.filter((item) => item.state === 'offline' || item.state === 'no_data').length,
+      moving: count(['moving']),
+      idle: count(['idle']),
+      parked: count(['parked']),
+      offline: count(['offline', 'no_data']),
+      harsh_events_today: vehicles.reduce(
+        (sum, item) => sum + item.harsh_today.brake + item.harsh_today.accel + item.harsh_today.turn,
+        0,
+      ),
+      low_fuel: vehicles.filter((item) => item.alerts.includes('low_fuel')).length,
       vehicles,
     };
   }

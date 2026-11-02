@@ -52,8 +52,20 @@ Responses use `{ status, message, data }` and errors use `{ status, error, messa
 Trackers publish to `telematics/{imei}/telemetry` (`MQTT_TOPIC_FILTER`):
 
 ```json
-{ "ts": 1793259595, "lat": 13.0827, "lng": 80.2707, "spd": 42, "hdg": 180, "ign": 1, "odo": 12345.6, "fuel": 56 }
+{ "ts": 1793259595, "lat": 13.0827, "lng": 80.2707, "spd": 42, "hdg": 180, "ign": 1, "odo": 12345.6,
+  "fuel": 56, "bat": 88, "volt": 12.6, "evt": "harsh_brake" }
 ```
+
+| Field | Meaning |
+|---|---|
+| `ts`, `lat`, `lng` | Required: Unix time in seconds and position |
+| `spd`, `hdg`, `odo` | Speed km/h, heading 0–359, odometer km |
+| `ign` | Ignition 1 on, 0 off |
+| `fuel` | Fuel level % |
+| `bat`, `volt` | Vehicle battery % and volts |
+| `evt` | Only when it happens: `harsh_brake`, `harsh_accel` (harsh riding) or `harsh_turn` |
+
+Live status (`GET /devices/live`) turns these into: state `moving`, `idle` (stopped, engine on), `parked` (engine off) or `offline`; how long it has been stopped; last fuel and battery; harsh events since midnight; and alerts `low_fuel` (<15%), `low_battery` (<20%), `harsh_driving`.
 
 `ts` is the current Unix time in seconds. Invalid messages and unknown IMEIs are logged and dropped. If the broker is down, HTTP still starts and the client retries every 5 seconds.
 

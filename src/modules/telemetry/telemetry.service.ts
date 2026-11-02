@@ -37,6 +37,9 @@ export class TelemetryService {
         ignition: payload.ign === undefined ? null : payload.ign === 1,
         odometer: payload.odo ?? null,
         fuel: payload.fuel ?? null,
+        battery: payload.bat === undefined ? null : Math.round(payload.bat),
+        battery_voltage: payload.volt ?? null,
+        event: payload.evt ?? null,
       });
       await manager.update(Device, device.id, { last_seen_at: new Date() });
     });

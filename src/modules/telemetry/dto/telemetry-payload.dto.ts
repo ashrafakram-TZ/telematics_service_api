@@ -13,6 +13,9 @@ import {
 const MAX_PAST_SECONDS = 30 * 24 * 60 * 60;
 const MAX_FUTURE_SECONDS = 5 * 60;
 
+export const DRIVING_EVENTS = ['harsh_brake', 'harsh_accel', 'harsh_turn'] as const;
+export type DrivingEvent = (typeof DRIVING_EVENTS)[number];
+
 @ValidatorConstraint({ name: 'recentTimestamp' })
 class RecentTimestamp implements ValidatorConstraintInterface {
   validate(ts: number): boolean {
@@ -65,4 +68,20 @@ export class TelemetryPayloadDto {
   @Min(0)
   @Max(100)
   fuel?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  bat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(60)
+  volt?: number;
+
+  @IsOptional()
+  @IsIn(DRIVING_EVENTS, { message: `evt must be one of ${DRIVING_EVENTS.join(', ')}` })
+  evt?: DrivingEvent;
 }

@@ -7,9 +7,12 @@ import {
   IsOptional,
   IsString,
   IsTimeZone,
+  IsUrl,
   Matches,
   Max,
   Min,
+  MinLength,
+  ValidateIf,
   validateSync,
 } from 'class-validator';
 
@@ -98,6 +101,19 @@ export class EnvironmentVariables {
   @IsOptional()
   @Matches(VEHICLE_TOPIC, { message: 'MQTT_OBD_TOPIC must have exactly one + segment for the vehicle IMEI' })
   MQTT_OBD_TOPIC?: string;
+
+  @IsOptional()
+  @ValidateIf((env: EnvironmentVariables) => !!env.TRIP_WEBHOOK_URL)
+  @IsUrl(
+    { require_tld: false, protocols: ['http', 'https'], require_protocol: true },
+    { message: 'TRIP_WEBHOOK_URL must be an http(s) URL, or empty to turn trip webhooks off' },
+  )
+  TRIP_WEBHOOK_URL?: string;
+
+  @ValidateIf((env: EnvironmentVariables) => !!env.TRIP_WEBHOOK_URL || !!env.TRIP_WEBHOOK_SECRET)
+  @IsString()
+  @MinLength(32, { message: 'TRIP_WEBHOOK_SECRET must be at least 32 characters when TRIP_WEBHOOK_URL is set' })
+  TRIP_WEBHOOK_SECRET?: string;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

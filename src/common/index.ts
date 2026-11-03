@@ -13,3 +13,4 @@ export * from './utils/list-query';
 export * from './utils/paginate';
 export * from './utils/timezone';
 export * from './utils/time-range';
+export * from './utils/geo';

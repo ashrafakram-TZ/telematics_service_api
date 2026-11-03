@@ -1,3 +1,5 @@
+import { haversineMeters } from '../common/utils/geo';
+
 export type LatLng = [number, number];
 
 export interface RoutePath {
@@ -13,14 +15,10 @@ export interface PathPosition {
   segment: number;
 }
 
-const EARTH_RADIUS_M = 6371000;
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
 export function distanceMeters([lat1, lng1]: LatLng, [lat2, lng2]: LatLng): number {
-  const dLat = rad(lat2 - lat1);
-  const dLng = rad(lng2 - lng1);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+  return haversineMeters({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
 }
 
 export function bearing([lat1, lng1]: LatLng, [lat2, lng2]: LatLng): number {

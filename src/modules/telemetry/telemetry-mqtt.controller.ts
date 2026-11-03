@@ -1,8 +1,7 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, MqttContext, Payload } from '@nestjs/microservices';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
-import { TELEMETRY_TOPIC } from '../mqtt/mqtt.constants';
+import { GPS_TOPIC, TELEMETRY_TOPIC, vehicleIdFromTopic } from '../mqtt/mqtt.constants';
+import { parsePayload } from '../mqtt/payload-parser';
 import { TelemetryPayloadDto } from './dto/telemetry-payload.dto';
 import { TelemetryService } from './telemetry.service';
 
@@ -13,23 +12,26 @@ export class TelemetryMqttController {
   constructor(private readonly telemetryService: TelemetryService) {}
 
   @EventPattern(TELEMETRY_TOPIC)
-  async handle(@Payload() data: unknown, @Ctx() ctx: MqttContext): Promise<void> {
-    const topic = ctx.getTopic();
-    const imei = topic.split('/')[1];
+  handle(@Payload() data: unknown, @Ctx() ctx: MqttContext): Promise<void> {
+    return this.ingest(TELEMETRY_TOPIC, data, ctx.getTopic());
+  }
 
-    if (typeof data !== 'object' || data === null) {
-      this.logger.warn(`${topic} rejected: payload is not a JSON object`);
+  @EventPattern(GPS_TOPIC)
+  handleGps(@Payload() data: unknown, @Ctx() ctx: MqttContext): Promise<void> {
+    return this.ingest(GPS_TOPIC, data, ctx.getTopic());
+  }
+
+  private async ingest(filter: string, data: unknown, topic: string): Promise<void> {
+    const imei = vehicleIdFromTopic(filter, topic);
+    if (!imei) {
+      this.logger.warn(`${topic} rejected: topic does not match ${filter}`);
       return;
     }
-
-    const payload = plainToInstance(TelemetryPayloadDto, data);
-    const [error] = await validate(payload, { whitelist: true });
-    if (error) {
-      const reason = Object.values(error.constraints ?? {})[0] ?? `${error.property} is invalid`;
-      this.logger.warn(`${topic} rejected: ${reason} (received ${error.property}=${JSON.stringify(error.value)})`);
+    const result = parsePayload(TelemetryPayloadDto, data);
+    if (!result.ok) {
+      this.logger.warn(`${topic} rejected: ${result.reason}`);
       return;
     }
-
-    await this.telemetryService.ingest(imei, payload);
+    await this.telemetryService.ingest(imei, result.payload);
   }
 }

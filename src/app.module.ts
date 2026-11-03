@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { HealthModule } from './modules/health/health.module';
 import { MqttModule } from './modules/mqtt/mqtt.module';
+import { ObdModule } from './modules/obd/obd.module';
 import { TelemetryModule } from './modules/telemetry/telemetry.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { TelemetryModule } from './modules/telemetry/telemetry.module';
     HealthModule,
     DevicesModule,
     TelemetryModule,
+    ObdModule,
   ],
 })
 export class AppModule {}

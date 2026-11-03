@@ -10,7 +10,9 @@ Vehicle tracking service. Tracker devices publish GPS/OBD data over MQTT; this s
 
 **Base URL**: \`/api/v1\`. **Success**: \`{ "status": 200, "message": "OK", "data": ... }\`. **Error**: \`{ "status": 401, "error": "API_KEY_INVALID", "message": "..." }\`.
 
-**MQTT**: topic \`telematics/<imei>/telemetry\`, payload \`{ "ts": 1793600000, "lat": 13.08, "lng": 80.21, "spd": 32, "hdg": 270, "ign": 1, "odo": 12045.2, "fuel": 64 }\`.
+**MQTT** (the \`+\` segment is the device IMEI):
+- \`fleet/<imei>/gps\` (and the older \`telematics/<imei>/telemetry\`): \`{ "ts": 1793600000, "lat": 13.08, "lng": 80.21, "spd": 32, "hdg": 270, "ign": 1, "odo": 12045.2, "fuel": 64, "bat": 88, "volt": 12.6, "evt": "harsh_brake" }\`
+- \`fleet/<imei>/obd\`: \`{ "ts": 1793600000, "rpm": 1450, "spd": 34, "coolant": 89.5, "load": 42, "throttle": 18, "fuel": 63.4, "volt": 13.9, "odo": 48213.7, "dtc": ["P0301"] }\`
 `;
 
 export function setupSwagger(app: INestApplication): void {
@@ -23,6 +25,7 @@ export function setupSwagger(app: INestApplication): void {
       .addApiKey({ type: 'apiKey', name: 'X-Api-Key', in: 'header' }, 'api-key')
       .addTag('Devices', 'Tracker devices and live vehicle status')
       .addTag('Telemetry', 'GPS positions and history')
+      .addTag('OBD', 'Engine data from the OBD port: rpm, coolant, load, fuel, DTC fault codes')
       .addTag('Health', 'Service status')
       .build(),
   );

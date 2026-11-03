@@ -9,7 +9,7 @@ import { AppModule } from './app.module';
 import { setupApp } from './app.setup';
 import { AppConfig } from './config/configuration';
 import { MqttConfig } from './config/mqtt.config';
-import { TELEMETRY_TOPIC } from './modules/mqtt/mqtt.constants';
+import { SUBSCRIBED_TOPICS } from './modules/mqtt/mqtt.constants';
 import { setupSwagger } from './swagger';
 
 function reachableHosts(host: string): string[] {
@@ -62,7 +62,7 @@ async function bootstrap(): Promise<void> {
   if (mqttCfg.enabled) {
     app
       .startAllMicroservices()
-      .then(() => logger.log(`MQTT subscribed to ${TELEMETRY_TOPIC} on ${mqttCfg.url}`))
+      .then(() => logger.log(`MQTT subscribed to ${SUBSCRIBED_TOPICS.join(', ')} on ${mqttCfg.url}`))
       .catch((error: Error) => logger.error(`MQTT failed to start: ${error.message}`));
   }
 }

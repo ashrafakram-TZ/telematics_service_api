@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AppException, listQuery, Paginated } from '../../common';
 import { appConfig, AppConfig } from '../../config/configuration';
+import { obdAlerts } from '../obd/obd-faults';
 import { deviceState, MOVING_KMPH, vehicleAlerts } from './device-state';
-import { DeviceStatusDto, FleetSummaryDto } from './dto/device-status.dto';
+import { DeviceStatusDto, FleetSummaryDto, ObdSnapshotDto } from './dto/device-status.dto';
 import { Device } from './entities/device.entity';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { DeviceQueryDto } from './dto/device-query.dto';
@@ -33,12 +34,24 @@ export class DevicesService {
       harsh_brake: string;
       harsh_accel: string;
       harsh_turn: string;
+      obd_at: Date | null;
+      rpm: number | null;
+      obd_speed: number | null;
+      coolant_c: number | null;
+      engine_load_pct: number | null;
+      throttle_pct: number | null;
+      fuel_pct: number | null;
+      battery_v: number | null;
+      odometer_km: number | null;
+      dtc: string[] | null;
     })[] = await this.dataSource.query(
       `SELECT d.id, d.imei, d.name, d.vehicle_no, d.last_seen_at,
               t.lat, t.lng, t.speed, t.heading, t.ignition, t.recorded_at,
               f.fuel, b.battery, b.battery_voltage, m.last_moved_at,
               COALESCE(h.harsh_brake, 0) AS harsh_brake, COALESCE(h.harsh_accel, 0) AS harsh_accel,
-              COALESCE(h.harsh_turn, 0) AS harsh_turn
+              COALESCE(h.harsh_turn, 0) AS harsh_turn,
+              o.recorded_at AS obd_at, o.rpm, o.speed AS obd_speed, o.coolant_c, o.engine_load_pct, o.throttle_pct,
+              o.fuel_pct, o.battery_v, o.odometer_km, o.dtc
        FROM devices d
        LEFT JOIN LATERAL (
          SELECT lat, lng, speed, heading, ignition, recorded_at FROM telemetry
@@ -64,6 +77,10 @@ export class DevicesService {
          WHERE device_id = d.id AND event IS NOT NULL
            AND recorded_at >= (date_trunc('day', now() AT TIME ZONE $2) AT TIME ZONE $2)
        ) h ON true
+       LEFT JOIN LATERAL (
+         SELECT recorded_at, rpm, speed, coolant_c, engine_load_pct, throttle_pct, fuel_pct, battery_v, odometer_km, dtc
+         FROM obd_readings WHERE device_id = d.id ORDER BY recorded_at DESC LIMIT 1
+       ) o ON true
        WHERE d.deleted_at IS NULL AND d.is_active = true
        ORDER BY d.name`,
       [MOVING_KMPH, this.app.timeZone],
@@ -72,6 +89,20 @@ export class DevicesService {
     const vehicles: DeviceStatusDto[] = rows.map((row) => {
       const status = deviceState(row.last_seen_at, row.speed, row.ignition, now, this.app.onlineWindowSeconds);
       const harsh = { brake: Number(row.harsh_brake), accel: Number(row.harsh_accel), turn: Number(row.harsh_turn) };
+      const obd: ObdSnapshotDto | null = row.obd_at
+        ? {
+            rpm: row.rpm,
+            speed: row.obd_speed,
+            coolant_c: row.coolant_c,
+            engine_load_pct: row.engine_load_pct,
+            throttle_pct: row.throttle_pct,
+            fuel_pct: row.fuel_pct,
+            battery_v: row.battery_v,
+            odometer_km: row.odometer_km,
+            dtc: row.dtc ?? [],
+            at: row.obd_at,
+          }
+        : null;
       return {
         id: Number(row.id),
         imei: row.imei,
@@ -85,7 +116,7 @@ export class DevicesService {
         stopped_since:
           status.state === 'idle' || status.state === 'parked' ? (row.last_moved_at ?? row.recorded_at) : null,
         harsh_today: harsh,
-        alerts: vehicleAlerts(row.fuel, row.battery, harsh),
+        alerts: [...vehicleAlerts(row.fuel, row.battery, harsh), ...obdAlerts(obd, now, this.app.onlineWindowSeconds)],
         position:
           row.lat === null || row.lng === null || !row.recorded_at
             ? null
@@ -97,6 +128,7 @@ export class DevicesService {
                 ignition: row.ignition,
                 recorded_at: row.recorded_at,
               },
+        obd,
       };
     });
     const count = (state: DeviceStatusDto['state'][]) => vehicles.filter((item) => state.includes(item.state)).length;
@@ -111,6 +143,8 @@ export class DevicesService {
         0,
       ),
       low_fuel: vehicles.filter((item) => item.alerts.includes('low_fuel')).length,
+      engine_faults: vehicles.filter((item) => item.alerts.some((a) => a === 'engine_fault' || a === 'engine_overheat'))
+        .length,
       vehicles,
     };
   }

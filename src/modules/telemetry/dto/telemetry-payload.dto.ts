@@ -17,7 +17,7 @@ export const DRIVING_EVENTS = ['harsh_brake', 'harsh_accel', 'harsh_turn'] as co
 export type DrivingEvent = (typeof DRIVING_EVENTS)[number];
 
 @ValidatorConstraint({ name: 'recentTimestamp' })
-class RecentTimestamp implements ValidatorConstraintInterface {
+export class RecentTimestamp implements ValidatorConstraintInterface {
   validate(ts: number): boolean {
     const now = Math.floor(Date.now() / 1000);
     return ts >= now - MAX_PAST_SECONDS && ts <= now + MAX_FUTURE_SECONDS;

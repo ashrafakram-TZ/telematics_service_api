@@ -7,10 +7,13 @@ import {
   IsOptional,
   IsString,
   IsTimeZone,
+  Matches,
   Max,
   Min,
   validateSync,
 } from 'class-validator';
+
+const VEHICLE_TOPIC = /^([^+#/]+\/)*\+(\/[^+#/]+)*$/;
 
 const toBoolean = ({ value }: { value: unknown }) => value === true || value === 'true';
 
@@ -87,6 +90,14 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   MQTT_TOPIC_FILTER?: string;
+
+  @IsOptional()
+  @Matches(VEHICLE_TOPIC, { message: 'MQTT_GPS_TOPIC must have exactly one + segment for the vehicle IMEI' })
+  MQTT_GPS_TOPIC?: string;
+
+  @IsOptional()
+  @Matches(VEHICLE_TOPIC, { message: 'MQTT_OBD_TOPIC must have exactly one + segment for the vehicle IMEI' })
+  MQTT_OBD_TOPIC?: string;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

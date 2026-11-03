@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, FindOperator, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
-import { AppException, offset, paginate, Paginated } from '../../common';
+import { DataSource, Repository } from 'typeorm';
+import { AppException, offset, paginate, Paginated, timeRange } from '../../common';
 import { DevicesService } from '../devices/devices.service';
 import { Device } from '../devices/entities/device.entity';
 import { TelemetryPayloadDto } from './dto/telemetry-payload.dto';
@@ -55,18 +55,11 @@ export class TelemetryService {
   async history(deviceId: number, { from, to, page, limit }: TelemetryQueryDto): Promise<Paginated<Telemetry>> {
     await this.devicesService.findOne(deviceId);
     const result = await this.telemetry.findAndCount({
-      where: { device_id: deviceId, recorded_at: this.range(from, to) },
+      where: { device_id: deviceId, recorded_at: timeRange(from, to) },
       order: { recorded_at: 'DESC' },
       skip: offset(page, limit),
       take: limit,
     });
     return paginate(result, page, limit);
-  }
-
-  private range(from?: string, to?: string): FindOperator<Date> | undefined {
-    if (from && to) return Between(new Date(from), new Date(to));
-    if (from) return MoreThanOrEqual(new Date(from));
-    if (to) return LessThanOrEqual(new Date(to));
-    return undefined;
   }
 }

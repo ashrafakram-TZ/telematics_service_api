@@ -18,7 +18,8 @@
     "migration:revert": "npm run typeorm -- migration:revert",
     "test": "jest",
     "test:watch": "jest --watch",
-    "simulate": "ts-node src/tools/simulate-bus.ts"
+    "simulate": "ts-node src/tools/simulate-bus.ts",
+    "sim:route": "ts-node src/tools/simulate-route.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

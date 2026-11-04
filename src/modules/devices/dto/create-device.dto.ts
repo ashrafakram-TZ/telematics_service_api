@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateDeviceDto {
   @ApiProperty({ example: '860000000000001' })
@@ -22,4 +22,16 @@ export class CreateDeviceDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional({
+    example: 40,
+    nullable: true,
+    type: Number,
+    description: 'Overspeed limit for this vehicle in km/h; null uses SAFETY_SPEED_LIMIT_KMH',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(10)
+  @Max(200)
+  speed_limit_kmh?: number | null;
 }

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { AppException, offset, paginate, Paginated } from '../../common';
 import { DevicesService } from '../devices/devices.service';
+import { deviationApplies, SafetyTrip, tripPath } from '../safety/safety-rules';
 import { Telemetry } from '../telemetry/entities/telemetry.entity';
 import {
   CreateTripDto,
@@ -29,6 +30,13 @@ import {
 } from './trip-engine';
 import { engineView, toTripState, TripWebhookBody, WebhookEventInput, webhookBody } from './trip-view';
 import { TripWebhookService } from './trip-webhook.service';
+
+export interface SafetyTripContext extends SafetyTrip {
+  id: number;
+  ref: string;
+  device_id: number;
+  kind: Trip['kind'];
+}
 
 export interface TripPoint extends EnginePoint {
   speed: number | null;
@@ -167,6 +175,19 @@ export class TripsService implements OnApplicationBootstrap, OnModuleDestroy {
       take: query.limit,
     });
     return paginate([items.map(toTripState), total], query.page, query.limit);
+  }
+
+  async safetyContext(deviceId: number): Promise<SafetyTripContext | null> {
+    const trip = await this.activeTrip(deviceId);
+    if (!trip) return null;
+    return {
+      id: trip.id,
+      ref: trip.ref,
+      device_id: trip.device_id,
+      kind: trip.kind,
+      path: tripPath(trip.kind, trip.stops, { lat: trip.destination_lat, lng: trip.destination_lng }),
+      check_deviation: deviationApplies(trip.kind, trip.stops),
+    };
   }
 
   async activeTripId(deviceId: number): Promise<number | null> {

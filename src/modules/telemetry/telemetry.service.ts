@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { AppException, offset, paginate, Paginated, timeRange } from '../../common';
 import { DevicesService } from '../devices/devices.service';
 import { Device } from '../devices/entities/device.entity';
+import { SafetyService } from '../safety/safety.service';
 import { PositionSource } from '../trips/trip-engine';
 import { TripsService } from '../trips/trips.service';
 import { PhonePositionResultDto } from './dto/phone-position-result.dto';
@@ -21,6 +22,7 @@ export class TelemetryService {
     @InjectRepository(Telemetry) private readonly telemetry: Repository<Telemetry>,
     @InjectRepository(Device) private readonly devices: Repository<Device>,
     private readonly trips: TripsService,
+    private readonly safety: SafetyService,
     private readonly devicesService: DevicesService,
     private readonly dataSource: DataSource,
   ) {}
@@ -65,6 +67,14 @@ export class TelemetryService {
         trip_id: tripId,
       });
       await manager.update(Device, deviceId, { last_seen_at: new Date() });
+    });
+    void this.safety.onPosition(deviceId, {
+      at: recordedAt.getTime(),
+      lat: payload.lat,
+      lng: payload.lng,
+      speed: payload.spd ?? null,
+      ignition: payload.ign === undefined ? null : payload.ign === 1,
+      event: payload.evt ?? null,
     });
     if (tripId) {
       void this.trips.onPosition(deviceId, {

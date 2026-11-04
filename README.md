@@ -8,7 +8,7 @@ Stack: NestJS 10, TypeORM, PostgreSQL, MQTT (REST and MQTT run in one process).
 
 ```bash
 npm install
-cp .env.example .env          # set DB_*, API_KEYS, MQTT_*, TRIP_WEBHOOK_*
+cp .env.example .env          # set DB_*, API_KEYS, MQTT_*, TRIP_WEBHOOK_*, optional SAFETY_*
 createdb telematics_service   # or create it in pgAdmin
 npm run migration:run
 npm run start:dev
@@ -39,7 +39,7 @@ No key returns `401 API_KEY_MISSING`; a wrong key returns `401 API_KEY_INVALID`.
 | `GET /devices/live` | Every active vehicle with state `moving`, `idle`, `offline` or `no_data`, and its last position |
 | `GET /devices/{id}/status` | Same for one vehicle |
 | `GET /devices` | List, search, sort and page devices |
-| `POST /devices`, `PATCH /devices/{id}`, `DELETE /devices/{id}` | Register and manage trackers (IMEI must be unique: `409 IMEI_TAKEN`) |
+| `POST /devices`, `PATCH /devices/{id}`, `DELETE /devices/{id}` | Register and manage trackers (IMEI must be unique: `409 IMEI_TAKEN`); optional `speed_limit_kmh` (10–200) overrides `SAFETY_SPEED_LIMIT_KMH` for that vehicle |
 | `GET /devices/{id}/telemetry/latest` | Latest position |
 | `GET /devices/{id}/telemetry?from&to&page&limit` | Position history for trip playback |
 | `GET /devices/{id}/obd/latest` | Latest OBD reading (`404 NO_OBD_DATA` when none yet) |
@@ -49,6 +49,10 @@ No key returns `401 API_KEY_MISSING`; a wrong key returns `401 API_KEY_INVALID`.
 | `POST /trips/{id}/end` | End a trip by hand, body `{ "reason": "driver" }` (`driver` or `admin`) |
 | `GET /trips/{id}` | TripState: position, stop statuses and ETAs |
 | `GET /trips?status&device_id&ref&page&limit` | Trips, newest first (`status` is `active` or `ended`) |
+| `GET /trips/{id}/playback?max_points` | Trip replay: GPS track oldest first, planned path, stop arrivals, safety events (see [Trip playback](#trip-playback)) |
+| `GET /safety-events?device_id&trip_id&kind&severity&from&to&page&limit` | Safety events, newest first (see [Safety rules](#safety-rules)) |
+| `GET /devices/{id}/health` | Vehicle health card: latest engine readings, active fault codes with descriptions, `good` / `warning` / `critical` / `unknown` |
+| `GET /devices/{id}/faults?status&from&to&page&limit` | Fault code log: when each code appeared, was last seen and cleared (`status` is `open` or `cleared`) |
 
 A vehicle is online when it reported within `ONLINE_WINDOW_SECONDS` (default 120) and moving above 2 km/h.
 
@@ -250,6 +254,26 @@ const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody)
 const ok = header.length === expected.length && crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));
 ```
 
+### Device events: `alert.raised` and `vehicle.fault`
+
+Two more event types go through the same webhook URL, secret, headers, signature and retries. They are queued per device instead of per trip, and their delivery is kept on the `safety_events` / `vehicle_faults` row. `id` is that row's id, so receivers can drop duplicates.
+
+```json
+{ "id": 31, "type": "alert.raised", "at": "2026-11-09T07:12:30.000+05:30",
+  "trip": { "id": 7, "ref": "TZMS-41", "device_id": 1, "kind": "pickup" }, "device_id": 1,
+  "alert": { "kind": "overspeed", "severity": "high", "message": "Overspeed: 72 km/h for 15 s (limit 50 km/h)",
+             "value": 72, "limit": 50, "position": { "lat": 13.08, "lng": 80.19, "speed_kmh": 72 } } }
+```
+
+`trip` is `null` outside a trip; `value`, `limit` and `position.speed_kmh` are left out when unknown.
+
+```json
+{ "id": 12, "type": "vehicle.fault", "at": "2026-11-09T07:12:30.000+05:30", "device_id": 1,
+  "fault": { "code": "P0217", "description": "Engine coolant over temperature", "severity": "high" }, "odometer_km": 48213.7 }
+```
+
+`odometer_km` is left out when the OBD reading had none.
+
 ### Phone GPS fallback: `POST /devices/{id}/positions`
 
 For a bus whose tracker is down, the product API can forward the driver's phone GPS. The body is the GPS payload (`{ "ts": 1793600000, "lat": 13.0846, "lng": 80.1767, "spd": 28, "hdg": 90, "ign": 1 }`), validated like MQTT. It goes through the same ingest (stored with `source = phone`, live status updated, trip engine run) and returns `202`:
@@ -259,6 +283,38 @@ For a bus whose tracker is down, the product API can forward the driver's phone 
 ```
 
 If the tracker itself sent GPS in the last 60 seconds the point is ignored: `accepted: false, reason: "device_gps_recent"`. A deactivated device returns `409 DEVICE_INACTIVE`.
+
+## Safety rules
+
+Every accepted GPS point (tracker or phone) is checked, in order per device, by `modules/safety/safety-rules.ts` (pure). A finding is stored in `safety_events` and sent as `alert.raised`.
+
+| Kind | When | Severity |
+|---|---|---|
+| `overspeed` | Speed above the limit (device `speed_limit_kmh`, else `SAFETY_SPEED_LIMIT_KMH`, default 50) for `SAFETY_OVERSPEED_SECONDS` (10). Once per episode; `value` is the peak | `high` at 20 km/h over the limit, else `medium` |
+| `harsh_braking` | Speed falls by `SAFETY_HARSH_BRAKE_KMH_PER_S` (12) or more per second between two points at most 10 s apart, from 20 km/h or more; or the tracker sends `evt: harsh_brake`. `value` is km/h lost per second | `high` at 1.5 × the threshold, else `medium` |
+| `idle` | During a trip, engine not off and speed 3 km/h or less for `SAFETY_IDLE_MINUTES` (5). Once per stop; `value` is minutes | `medium` at 3 × the limit, else `low` |
+| `route_deviation` | During a trip, farther than `SAFETY_ROUTE_DEVIATION_M` (300) from the planned path for `SAFETY_ROUTE_DEVIATION_SECONDS` (30). The path is the stops in travel order joined to the destination (pickup: stops then school; drop: school then stops). A pickup is checked only after it reaches its first stop. `value` is the farthest distance in metres | `high` at 2 × the limit, else `medium` |
+
+The same kind is raised at most once per device every `SAFETY_COOLDOWN_SECONDS` (300). Points older than the last checked point are ignored.
+
+## Vehicle health and faults
+
+Each OBD message with a `dtc` list is compared with the device's open faults (`vehicle_faults`): a new code opens a row and sends `vehicle.fault` once; a code no longer reported is closed (`cleared_at`). Descriptions and severities come from `DTC_CATALOG` in `modules/obd/obd-faults.ts` (unknown codes: P and U medium, C high, B low).
+
+`GET /devices/{id}/health` status:
+
+| Status | When |
+|---|---|
+| `critical` | A `high` fault, coolant above 105 °C or battery below 11.5 V |
+| `warning` | Any other fault, coolant above 100 °C, battery below 12 V, fuel below 15%, or the last OBD reading is more than a day old |
+| `good` | None of these |
+| `unknown` | No OBD reading yet |
+
+Faults count only from a reading in the last 24 hours. `reasons` lists what lowered the status.
+
+## Trip playback
+
+`GET /trips/{id}/playback?max_points=1500` (50–5000) returns `trip` (TripState), `path` (planned route), `points` `[{ at, lat, lng, speed, heading }]` oldest first, `total_points`, `sampled`, `distance_km`, `duration_seconds`, `max_speed`, `avg_speed` (distance ÷ duration), `stop_arrivals` (each stop with `status`, `arrived_at`, `departed_at`) and `safety_events`. Long tracks are thinned evenly to `max_points`, keeping the first and last point; distance and speeds use every stored point. It works on an active trip too (the track so far).
 
 ## GPS log and TimescaleDB
 
@@ -356,8 +412,9 @@ src/
   modules/
     devices/              trackers and live vehicle status
     telemetry/            GPS ingest (fleet/+/gps and telematics/+/telemetry), phone fallback, position history
-    obd/                  OBD ingest (fleet/+/obd), OBD history, engine fault rules
-    trips/                trips API, trip engine (trip-engine.ts, pure), webhook delivery and signing
+    obd/                  OBD ingest (fleet/+/obd), OBD history, fault codes, vehicle health, vehicle.fault
+    trips/                trips API, trip engine (trip-engine.ts, pure), playback, webhook delivery and signing
+    safety/               safety rules (safety-rules.ts, pure), safety_events, alert.raised
     mqtt/                 broker connection status, topic filters, payload parser
     health/               /api/health
   tools/simulate-bus.ts   fake tracker for demos (original topic)

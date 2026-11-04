@@ -42,6 +42,13 @@ npm run sim:trip -- --trip 7 --time-scale 2   # drive a trip's device through it
 - `POST /devices/:id/positions` is the phone GPS fallback; it is ignored while the tracker sent GPS in the last 60 s.
 - Event types, payload shape and end reasons are a contract with the School API (`/api/v1/integrations/telematics/events`). Update README, Swagger and `sim:trip` with any change.
 
+## Safety, faults and playback (FLEET-10/11/13)
+
+- `modules/safety/safety-rules.ts` is pure and holds every safety rule (overspeed, harsh braking, idle, route deviation, cooldown); change it with `safety-rules.spec.ts`. `TelemetryService.record` calls `SafetyService.onPosition` without awaiting; it is serialised per device and keeps state in memory.
+- Fault codes: `obd-faults.ts` (`DTC_CATALOG`, `vehicleHealth`, pure). `ObdService` opens a `vehicle_faults` row per new code and closes it when the code disappears.
+- `alert.raised` and `vehicle.fault` go out through `TripWebhookService.send` (same URL, secret and retries, queued per device). Their payloads are a contract with the School API: update README and the Swagger models (`AlertRaisedWebhookDto`, `VehicleFaultWebhookDto`) together.
+- Thresholds come from `SAFETY_*` settings (`config/safety.config.ts`) and `devices.speed_limit_kmh`.
+
 ## Structure
 
 `src/common` is shared plumbing (envelope, filter, guard, list helpers). Features go in `src/modules/<feature>/` with `entities/`, `dto/`, service, controller and `*.spec.ts`. Every controller gets `@ApiTags`, `@ApiSecurity('api-key')`, `@ApiOperation` and `@ApiEnvelope`.

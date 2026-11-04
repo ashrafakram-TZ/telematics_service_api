@@ -18,6 +18,9 @@ import {
 
 const VEHICLE_TOPIC = /^([^+#/]+\/)*\+(\/[^+#/]+)*$/;
 
+const toOptionalNumber = ({ value }: { value: unknown }) =>
+  value === undefined || value === null || value === '' ? undefined : Number(value);
+
 const toBoolean = ({ value }: { value: unknown }) => value === true || value === 'true';
 
 export class EnvironmentVariables {
@@ -114,6 +117,55 @@ export class EnvironmentVariables {
   @IsString()
   @MinLength(32, { message: 'TRIP_WEBHOOK_SECRET must be at least 32 characters when TRIP_WEBHOOK_URL is set' })
   TRIP_WEBHOOK_SECRET?: string;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(10)
+  @Max(200)
+  SAFETY_SPEED_LIMIT_KMH?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  SAFETY_OVERSPEED_SECONDS?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(3)
+  @Max(50)
+  SAFETY_HARSH_BRAKE_KMH_PER_S?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(1)
+  @Max(240)
+  SAFETY_IDLE_MINUTES?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(50)
+  @Max(10000)
+  SAFETY_ROUTE_DEVIATION_M?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(0)
+  @Max(600)
+  SAFETY_ROUTE_DEVIATION_SECONDS?: number;
+
+  @IsOptional()
+  @Transform(toOptionalNumber)
+  @IsInt()
+  @Min(0)
+  @Max(86400)
+  SAFETY_COOLDOWN_SECONDS?: number;
 }
 
 export function validate(config: Record<string, unknown>): EnvironmentVariables {

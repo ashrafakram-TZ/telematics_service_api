@@ -1,19 +1,25 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ApiExtraModels, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { ApiEnvelope, ApiErrors, ResponseMessage } from '../../common';
+import { AlertRaisedWebhookDto, VehicleFaultWebhookDto } from '../safety/dto/safety-event.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { EndTripDto } from './dto/end-trip.dto';
+import { PlaybackQueryDto, TripPlaybackDto } from './dto/trip-playback.dto';
 import { TripQueryDto } from './dto/trip-query.dto';
 import { TripStateDto, TripWebhookEventDto } from './dto/trip-state.dto';
+import { TripPlaybackService } from './trip-playback.service';
 import { TripsService } from './trips.service';
 
 @ApiTags('Trips')
 @ApiSecurity('api-key')
-@ApiExtraModels(TripWebhookEventDto)
+@ApiExtraModels(TripWebhookEventDto, AlertRaisedWebhookDto, VehicleFaultWebhookDto)
 @ApiErrors(HttpStatus.UNAUTHORIZED)
 @Controller('trips')
 export class TripsController {
-  constructor(private readonly trips: TripsService) {}
+  constructor(
+    private readonly trips: TripsService,
+    private readonly playbacks: TripPlaybackService,
+  ) {}
 
   @Post()
   @ResponseMessage('Trip started')
@@ -49,6 +55,18 @@ export class TripsController {
   @ApiErrors(HttpStatus.BAD_REQUEST)
   list(@Query() query: TripQueryDto) {
     return this.trips.list(query);
+  }
+
+  @Get(':id/playback')
+  @ApiOperation({
+    summary: 'Trip playback: GPS track oldest first, planned path, stop arrivals and safety events',
+    description:
+      'Points are thinned evenly to max_points (default 1500, first and last kept); distance and speeds use every stored point. Works on an active trip too (the track so far).',
+  })
+  @ApiEnvelope(TripPlaybackDto)
+  @ApiErrors(HttpStatus.BAD_REQUEST, HttpStatus.NOT_FOUND)
+  playback(@Param('id', ParseIntPipe) id: number, @Query() query: PlaybackQueryDto) {
+    return this.playbacks.playback(id, query.max_points);
   }
 
   @Get(':id')

@@ -21,12 +21,26 @@ export interface DeliveryResult {
   error?: string;
 }
 
+export interface WebhookBody {
+  id: number;
+  type: string;
+}
+
+export interface DeliveryUpdate {
+  delivery_attempts: number;
+  delivery_status: 'pending' | 'delivered' | 'failed';
+  delivered_at: Date | null;
+  last_error: string | null;
+}
+
+export type DeliveryRecorder = (update: DeliveryUpdate) => Promise<unknown>;
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 @Injectable()
 export class TripWebhookService implements OnApplicationBootstrap {
   private readonly logger = new Logger('TripWebhook');
-  private readonly queues = new Map<number, Promise<void>>();
+  private readonly queues = new Map<string, Promise<void>>();
   private readonly positions = new LatestWinsThrottle<TripWebhookBody>(POSITION_THROTTLE_MS, (body) => {
     void this.post(body).then((result) => {
       if (!result.ok) this.logger.debug(`trip.position for trip ${body.trip.id}: ${result.error}`);
@@ -58,13 +72,20 @@ export class TripWebhookService implements OnApplicationBootstrap {
   }
 
   enqueue(body: TripWebhookBody): void {
+    this.send(`trip ${body.trip.id}`, body, (update) =>
+      body.id ? this.events.update(body.id, update) : Promise.resolve(),
+    );
+  }
+
+  send(queue: string, body: WebhookBody, recorder: DeliveryRecorder): void {
     if (!this.enabled) return;
-    const tripId = body.trip.id;
-    const previous = this.queues.get(tripId) ?? Promise.resolve();
-    const next = previous.then(() => this.deliver(body)).catch((error: Error) => this.logger.error(error.message));
-    this.queues.set(tripId, next);
+    const previous = this.queues.get(queue) ?? Promise.resolve();
+    const next = previous
+      .then(() => this.deliver(queue, body, recorder))
+      .catch((error: Error) => this.logger.error(error.message));
+    this.queues.set(queue, next);
     void next.then(() => {
-      if (this.queues.get(tripId) === next) this.queues.delete(tripId);
+      if (this.queues.get(queue) === next) this.queues.delete(queue);
     });
   }
 
@@ -72,35 +93,24 @@ export class TripWebhookService implements OnApplicationBootstrap {
     return Promise.all([...this.queues.values()]).then(() => undefined);
   }
 
-  private async deliver(body: TripWebhookBody): Promise<void> {
+  private async deliver(queue: string, body: WebhookBody, recorder: DeliveryRecorder): Promise<void> {
     let attempt = 0;
     for (;;) {
       const result = await this.post(body);
       attempt += 1;
-      await this.record(body.id, attempt, result);
+      await recorder(deliveryUpdate(attempt, result));
       if (result.ok) return;
-      this.logger.warn(`${body.type} #${body.id} for trip ${body.trip.id} attempt ${attempt}: ${result.error}`);
+      this.logger.warn(`${body.type} #${body.id} for ${queue} attempt ${attempt}: ${result.error}`);
       const delay = RETRY_DELAYS_MS[attempt - 1];
       if (delay === undefined) {
-        this.logger.error(`${body.type} #${body.id} for trip ${body.trip.id} failed after ${attempt} attempts`);
+        this.logger.error(`${body.type} #${body.id} for ${queue} failed after ${attempt} attempts`);
         return;
       }
       await this.wait(delay);
     }
   }
 
-  private async record(id: number, attempts: number, result: DeliveryResult): Promise<void> {
-    if (!id) return;
-    const final = result.ok || attempts > RETRY_DELAYS_MS.length;
-    await this.events.update(id, {
-      delivery_attempts: attempts,
-      delivery_status: result.ok ? 'delivered' : final ? 'failed' : 'pending',
-      delivered_at: result.ok ? new Date() : null,
-      last_error: result.ok ? null : (result.error ?? 'unknown error').slice(0, 300),
-    });
-  }
-
-  protected async post(body: TripWebhookBody): Promise<DeliveryResult> {
+  protected async post(body: WebhookBody): Promise<DeliveryResult> {
     const raw = JSON.stringify(zoneDates(body, this.app.timeZone));
     try {
       const response = await fetch(this.config.webhookUrl, {
@@ -118,4 +128,14 @@ export class TripWebhookService implements OnApplicationBootstrap {
       return { ok: false, error: (error as Error).message };
     }
   }
+}
+
+export function deliveryUpdate(attempts: number, result: DeliveryResult): DeliveryUpdate {
+  const final = result.ok || attempts > RETRY_DELAYS_MS.length;
+  return {
+    delivery_attempts: attempts,
+    delivery_status: result.ok ? 'delivered' : final ? 'failed' : 'pending',
+    delivered_at: result.ok ? new Date() : null,
+    last_error: result.ok ? null : (result.error ?? 'unknown error').slice(0, 300),
+  };
 }

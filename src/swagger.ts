@@ -16,6 +16,8 @@ Vehicle tracking service. Tracker devices publish GPS/OBD data over MQTT; this s
 
 **Trips**: \`POST /trips\` starts a trip with its stops and destination (stop references, names and coordinates only, never student data). The engine runs on every GPS point and sends events to \`TRIP_WEBHOOK_URL\`: \`trip.started\`, \`trip.position\` (at most one per 2 s per trip), \`stop.approaching\`, \`stop.arrived\`, \`stop.departed\`, \`trip.ended\`. Each POST carries \`X-Telematics-Event: <type>\` and \`X-Telematics-Signature: sha256=<hex HMAC-SHA256 of the raw body with TRIP_WEBHOOK_SECRET>\`; the body is the TripWebhookEventDto schema below. Queued events retry after 1 s, 5 s and 15 s, in order per trip.
 
+**Safety and faults**: every GPS point is checked for overspeed, harsh braking, long idle and route deviation (\`GET /safety-events\`), and each new OBD fault code opens a fault (\`GET /devices/{id}/faults\`, health card at \`GET /devices/{id}/health\`). They go to the same webhook as \`alert.raised\` (AlertRaisedWebhookDto) and \`vehicle.fault\` (VehicleFaultWebhookDto), queued per device. Replay a trip with \`GET /trips/{id}/playback\`.
+
 **Phone GPS fallback**: \`POST /devices/{id}/positions\` takes the GPS payload above and is used only when the tracker sent no GPS in the last 60 s.
 `;
 
@@ -31,6 +33,8 @@ export function setupSwagger(app: INestApplication): void {
       .addTag('Telemetry', 'GPS positions and history')
       .addTag('Trips', 'Trips with stops: ETAs, geofence events and the signed webhook')
       .addTag('OBD', 'Engine data from the OBD port: rpm, coolant, load, fuel, DTC fault codes')
+      .addTag('Vehicle health', 'Health card and fault code log per vehicle')
+      .addTag('Safety', 'Overspeed, harsh braking, long idle and route deviation events')
       .addTag('Health', 'Service status')
       .build(),
   );

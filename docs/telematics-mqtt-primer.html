@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telematics and MQTT Primer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #f5f7f4;
+    --surface: #ffffff;
+    --ink: #17201c;
+    --muted: #56625c;
+    --line: #d9e0db;
+    --accent: #0d6f63;
+    --accent-soft: #e2f0ec;
+    --warn: #9a4a07;
+    --warn-soft: #fbefe2;
+    --code-bg: #eef2ef;
+    --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #101513;
+      --surface: #171e1b;
+      --ink: #e4ebe7;
+      --muted: #9aa8a1;
+      --line: #2a3430;
+      --accent: #5cc0ad;
+      --accent-soft: #16302b;
+      --warn: #eaa65c;
+      --warn-soft: #2e2214;
+      --code-bg: #1c2522;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #101513;
+    --surface: #171e1b;
+    --ink: #e4ebe7;
+    --muted: #9aa8a1;
+    --line: #2a3430;
+    --accent: #5cc0ad;
+    --accent-soft: #16302b;
+    --warn: #eaa65c;
+    --warn-soft: #2e2214;
+    --code-bg: #1c2522;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.65 var(--body);
+    padding-inline: 20px;
+    padding-block: 48px 72px;
+  }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 56px; }
+  section { display: grid; gap: 16px; }
+
+  h1, h2, h3 { font-family: var(--display); font-stretch: 87%; text-wrap: balance; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(2rem, 6vw, 2.75rem); font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 1.6rem; font-weight: 700; }
+  h3 { font-size: 1.1rem; font-weight: 600; }
+  p, ul, ol { margin: 0; }
+  ul, ol { padding-left: 1.25rem; display: grid; gap: 6px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  strong { font-weight: 600; }
+
+  .eyebrow { font: 500 0.75rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+  .lede { font-size: 1.125rem; color: var(--muted); max-width: 62ch; }
+  header { display: grid; gap: 14px; }
+  .meta { font-size: 0.875rem; color: var(--muted); }
+  nav ol { columns: 2; column-gap: 32px; display: block; font-size: 0.9375rem; }
+  nav li { margin-bottom: 4px; break-inside: avoid; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.875em; }
+  :not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font: 400 0.875rem/1.6 var(--mono);
+  }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 500 0.75rem/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .note { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--surface); display: grid; gap: 6px; }
+  .note.warn { background: var(--warn-soft); border-color: transparent; }
+  .note.warn .note-title { color: var(--warn); }
+  .note-title { font: 600 0.8125rem/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+
+  .steps { list-style: none; padding: 0; counter-reset: step; display: grid; gap: 22px; }
+  .steps > li { counter-increment: step; display: grid; grid-template-columns: 32px 1fr; gap: 6px 12px; }
+  .steps > li::before {
+    content: counter(step);
+    grid-row: span 4;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--bg);
+    font: 600 0.875rem/28px var(--mono);
+    text-align: center;
+  }
+  .steps > li > * { grid-column: 2; }
+  .expect { font-size: 0.9375rem; color: var(--muted); }
+  .expect strong { color: var(--ink); }
+
+  .payload { display: grid; gap: 8px; }
+  .payload-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: 500 0.8125rem/1 var(--body);
+    color: var(--accent);
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-soft); }
+  .status { font-size: 0.8125rem; color: var(--muted); }
+
+  .gaps { display: grid; gap: 10px; list-style: none; padding: 0; }
+  .gaps li { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px; }
+
+  figure { margin: 0; display: grid; gap: 10px; }
+  .diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .diagram svg { display: block; width: 100%; height: auto; min-width: 620px; color: var(--ink); }
+  figcaption { font-size: 0.875rem; color: var(--muted); max-width: 70ch; }
+
+  .d-box { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .d-ext { fill: var(--code-bg); stroke: currentColor; stroke-width: 1.2; }
+  .d-acc { stroke: var(--accent); stroke-width: 1.8; }
+  .d-plan { stroke-dasharray: 6 4; }
+  .d-frame { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 2 3; }
+  .d-strip { fill: var(--accent-soft); stroke: none; }
+  .d-ok { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  .d-no { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.2; }
+  .d-line { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .d-cmd { fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .d-t { fill: currentColor; font: 600 13px var(--body); text-anchor: middle; }
+  .d-t2 { fill: currentColor; font: 600 12px var(--body); text-anchor: middle; }
+  .d-s { fill: var(--muted); font: 400 11px var(--body); text-anchor: middle; }
+  .d-l { fill: var(--muted); font: 500 11px var(--mono); text-anchor: middle; }
+  .d-k { fill: var(--muted); font: 600 10px var(--mono); letter-spacing: 0.08em; }
+  .d-start { text-anchor: start; }
+  .d-end { text-anchor: end; }
+  .d-arrow { fill: currentColor; }
+  .d-arrow-acc { fill: var(--accent); }
+
+  footer { font-size: 0.8125rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+  @media (max-width: 560px) {
+    nav ol { columns: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">Telematics API · team primer</span>
+    <h1>Telematics and MQTT Primer</h1>
+    <p class="lede">What our vehicle devices send, how a reading travels from the vehicle to the database, how to test every step today, and where the system goes next.</p>
+    <p class="meta">For engineers joining the telematics POC. Matches the code in <code>C:\Users\DELL\Telematics</code> as of 29 Oct 2026.</p>
+    <nav aria-label="Contents">
+      <ol>
+        <li><a href="#telematics">What telematics is</a></li>
+        <li><a href="#mqtt">What MQTT is</a></li>
+        <li><a href="#real-life">How it works in real life</a></li>
+        <li><a href="#architecture">Architecture of this base</a></li>
+        <li><a href="#flow">What happens to one message</a></li>
+        <li><a href="#code">Where each idea lives in the code</a></li>
+        <li><a href="#check">How to check everything now</a></li>
+        <li><a href="#production">Full production architecture</a></li>
+        <li><a href="#gaps">Known gaps</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <section id="telematics">
+    <span class="eyebrow">Part 1</span>
+    <h2>What telematics is</h2>
+    <p>Telematics means a device in a vehicle sending its data to a server over the mobile network.</p>
+    <ul>
+      <li><strong>The device</strong> is a small GPS tracker in a truck, bus or car. It has a GPS chip, a SIM card, and wires to the ignition and fuel sensor.</li>
+      <li><strong>What it sends:</strong> where it is (<code>lat</code>, <code>lng</code>), speed (<code>spd</code>), direction (<code>hdg</code>), whether the engine is on (<code>ign</code>), distance travelled (<code>odo</code>) and fuel level (<code>fuel</code>).</li>
+      <li><strong>Identity:</strong> each device has a 15-digit <strong>IMEI</strong>, like a serial number. That is why <code>devices.imei</code> is the key in our API.</li>
+      <li><strong>What the server does:</strong> receives the messages, stores them in the <code>telemetry</code> table, and shows live location, history and status, such as when the device was last seen (<code>last_seen_at</code>).</li>
+      <li><strong>Later features:</strong> trips, geofences (alert when a vehicle leaves an area), overspeed alerts, fuel theft detection.</li>
+    </ul>
+
+    <h3>Why messages must stay small</h3>
+    <p>Devices use mobile data, often on weak 2G or 4G, and they report all day. In the POC a device sends one reading every 5 seconds, which is <strong>about 17,000 messages per device per day</strong> (86,400 seconds ÷ 5). A fleet of 100 vehicles is 1.7 million a day. Every byte counts, so the payload uses short keys:</p>
+    <pre>{ "ts": 1793259595, "lat": 13.0827, "lng": 80.2707, "spd": 42, "hdg": 180, "ign": 1, "odo": 12345.6, "fuel": 56 }</pre>
+  </section>
+
+  <section id="mqtt">
+    <span class="eyebrow">Part 2</span>
+    <h2>What MQTT is</h2>
+    <p>MQTT is a lightweight messaging protocol built for devices like these. It uses <strong>publish and subscribe</strong> through a middleman called the broker. Devices and our API both connect to the broker and never talk to each other directly.</p>
+    <ul>
+      <li><strong>Broker</strong> is the post office. Mosquitto, HiveMQ and EMQX are common ones. We use <code>broker.hivemq.com:1883</code> for the POC.</li>
+      <li><strong>Topic</strong> is the address on the message, such as <code>telematics/860000000000001/telemetry</code>.</li>
+      <li><strong>Publish:</strong> the device sends a message to a topic. A publish topic must be exact: no <code>+</code> or <code>#</code>.</li>
+      <li><strong>Subscribe:</strong> our API asks for every message on <code>telematics/+/telemetry</code>. The <code>+</code> matches any one level, so this means "any IMEI".</li>
+    </ul>
+
+    <div class="note">
+      <span class="note-title">The topic is configurable</span>
+      <p>The API subscribes to the value of <code>MQTT_TOPIC_FILTER</code> in <code>.env</code>. If it is empty or missing, the API uses <code>telematics/+/telemetry</code>. The API reads the IMEI from the <strong>second</strong> part of the topic, so any custom filter must keep that shape: <code>something/{imei}/something</code>.</p>
+    </div>
+
+    <h3>QoS: how hard the broker tries to deliver</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>QoS</th><th>Guarantee</th><th>Trade-off</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0</td><td>Sent once, no confirmation</td><td>Can be lost on a bad network</td></tr>
+          <tr><td class="num">1</td><td>Delivered at least once</td><td>Can arrive <strong>twice</strong></td></tr>
+          <tr><td class="num">2</td><td>Delivered exactly once</td><td>Slowest, rarely used for telemetry</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Telematics usually uses QoS 0 or 1. With QoS 1 the same reading can be stored twice. <strong>Our API does not remove duplicates yet</strong> (see Known gaps).</p>
+
+    <h3>Why not plain HTTP</h3>
+    <ul>
+      <li>MQTT keeps one connection open, and each message has a header of only a few bytes.</li>
+      <li>It copes with weak or dropping networks and reconnects on its own.</li>
+      <li>The server can push commands back to the device on the same connection, for example "cut engine" on <code>telematics/{imei}/cmd</code>.</li>
+    </ul>
+  </section>
+
+  <section id="real-life">
+    <span class="eyebrow">Part 3</span>
+    <h2>How it works in real life</h2>
+    <p><strong>Nobody sends these messages by hand.</strong> The tracker's firmware builds the message and publishes it on its own, every few seconds, for as long as the vehicle has power. Our server is automatic too: it stays subscribed and saves each message as it arrives.</p>
+
+    <h3>Where each field comes from</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Source on the device</th></tr></thead>
+        <tbody>
+          <tr><td><code>ts</code></td><td>GPS clock, so always current Unix time in seconds</td></tr>
+          <tr><td><code>lat</code>, <code>lng</code>, <code>spd</code>, <code>hdg</code></td><td>GPS chip</td></tr>
+          <tr><td><code>ign</code></td><td>Wire connected to the ignition</td></tr>
+          <tr><td><code>odo</code></td><td>Distance the device has calculated</td></tr>
+          <tr><td><code>fuel</code></td><td>Fuel sensor wire</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Set up once per device</h3>
+    <p>Each tracker is configured once, usually with the vendor's setup tool or by SMS commands:</p>
+    <ul>
+      <li>the <strong>broker address</strong> (later our private broker)</li>
+      <li>its <strong>topic</strong>, <code>telematics/{its IMEI}/telemetry</code></li>
+      <li>the <strong>send interval</strong>, for example every 5 seconds</li>
+    </ul>
+    <p>The device never needs our server's URL. It only knows the broker. That is why the server can move, redeploy or change IP without touching a single vehicle.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Who</th><th>Needs to know</th></tr></thead>
+        <tbody>
+          <tr><td>Tracker in the vehicle</td><td>Broker address, its topic, the payload format</td></tr>
+          <tr><td>Our API</td><td>Broker address and topic filter (from <code>.env</code>)</td></tr>
+          <tr><td>Frontend, testers, Postman GETs</td><td>Our API URL, e.g. <code>http://192.168.1.86:3000/api</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="note-title">Postman and MQTTX are fake devices</span>
+      <p>When we test, Postman plays the part of the tracker. <code>{{$timestamp}}</code> stands in for the GPS clock, and the fixed numbers stand in for the sensors.</p>
+    </div>
+
+    <div class="note warn">
+      <span class="note-title">Check the device model early</span>
+      <p>Many popular trackers (for example Concox and several Teltonika models) do not send JSON over MQTT. They use their own compact binary format over plain TCP. Ask the vendor: <strong>"Does this device support MQTT with a custom JSON payload?"</strong> If yes, our project works as it is. If no, we add a small protocol gateway that converts their format into our JSON (shown in the production diagram).</p>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <span class="eyebrow">Part 4</span>
+    <h2>Architecture of this base</h2>
+    <p>One NestJS process does two jobs: it listens on MQTT for device readings, and it serves the REST API for people. Both sides share one PostgreSQL database.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 760 330" role="img" aria-label="A device publishes to the MQTT broker. The broker delivers to the API's MQTT controller, which validates and passes to TelemetryService, which writes to PostgreSQL. HTTP clients call the REST controllers, which read from PostgreSQL.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="d-arrow" d="M0 0L10 5L0 10z"/>
+            </marker>
+          </defs>
+
+          <rect class="d-ext" x="20" y="40" width="140" height="56" rx="8"/>
+          <text class="d-t" x="90" y="63">GPS device</text>
+          <text class="d-s" x="90" y="81">or Postman · MQTTX</text>
+
+          <rect class="d-box d-acc" x="250" y="40" width="150" height="56" rx="8"/>
+          <text class="d-t" x="325" y="63">MQTT broker</text>
+          <text class="d-l" x="325" y="81">broker.hivemq.com</text>
+
+          <rect class="d-box" x="250" y="128" width="150" height="64" rx="8"/>
+          <text class="d-t" x="325" y="154">PostgreSQL :5433</text>
+          <text class="d-l" x="325" y="172">devices · telemetry</text>
+
+          <rect class="d-ext" x="20" y="248" width="140" height="56" rx="8"/>
+          <text class="d-t" x="90" y="270">HTTP client</text>
+          <text class="d-s" x="90" y="288">frontend · Postman</text>
+
+          <rect class="d-frame" x="460" y="12" width="280" height="306" rx="12"/>
+          <text class="d-k" x="476" y="32">TELEMATICS API · NESTJS · :3000</text>
+
+          <rect class="d-box" x="480" y="44" width="240" height="48" rx="8"/>
+          <text class="d-t" x="600" y="64">MQTT controller</text>
+          <text class="d-s" x="600" y="81">checks topic and payload</text>
+
+          <rect class="d-box" x="480" y="124" width="240" height="48" rx="8"/>
+          <text class="d-t" x="600" y="144">TelemetryService</text>
+          <text class="d-s" x="600" y="161">saves in one transaction</text>
+
+          <rect class="d-strip" x="480" y="196" width="240" height="30" rx="6"/>
+          <text class="d-s" x="600" y="215">validation · error filter · IST times</text>
+
+          <rect class="d-box" x="480" y="248" width="240" height="56" rx="8"/>
+          <text class="d-t" x="600" y="270">REST controllers</text>
+          <text class="d-s" x="600" y="288">devices · telemetry · health</text>
+
+          <line class="d-line" x1="160" y1="68" x2="246" y2="68" marker-end="url(#a1)"/>
+          <text class="d-l" x="203" y="60">publish</text>
+
+          <line class="d-line" x1="400" y1="68" x2="476" y2="68" marker-end="url(#a1)"/>
+          <text class="d-l" x="430" y="60">deliver</text>
+
+          <line class="d-line" x1="600" y1="92" x2="600" y2="120" marker-end="url(#a1)"/>
+          <text class="d-l d-start" x="608" y="111">valid</text>
+
+          <line class="d-line" x1="480" y1="152" x2="404" y2="152" marker-end="url(#a1)"/>
+          <text class="d-l" x="432" y="145">insert</text>
+
+          <path class="d-line" d="M480 268 H430 V184 H404" marker-end="url(#a1)"/>
+          <text class="d-l d-end" x="424" y="232">reads</text>
+
+          <line class="d-line" x1="160" y1="290" x2="476" y2="290" marker-end="url(#a1)"/>
+          <text class="d-l" x="300" y="282">HTTP /api/…</text>
+        </svg>
+      </div>
+      <figcaption>The write path (top) runs on MQTT; the read path (bottom) runs on HTTP. Every HTTP response passes through the same validation, error filter and IST time conversion. The device and the HTTP client never talk to each other.</figcaption>
+    </figure>
+  </section>
+
+  <section id="flow">
+    <span class="eyebrow">Part 5</span>
+    <h2>What happens to one message</h2>
+    <p>Every reading passes four checks before it is saved. A message that fails any check is logged with the reason and dropped. It never stops the API.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 650 520" role="img" aria-label="Flowchart: device publishes; if the topic does not match telematics/+/telemetry it never reaches the API; if the payload is not JSON, or fields are invalid, or the IMEI is unknown, it is logged and dropped; otherwise the reading is saved with last_seen_at in one transaction and becomes readable over REST.">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="d-arrow" d="M0 0L10 5L0 10z"/>
+            </marker>
+          </defs>
+
+          <rect class="d-ext" x="150" y="16" width="300" height="40" rx="8"/>
+          <text class="d-t" x="300" y="41">Device publishes a reading</text>
+          <line class="d-line" x1="300" y1="56" x2="300" y2="80" marker-end="url(#a2)"/>
+
+          <rect class="d-box" x="150" y="84" width="300" height="44" rx="22"/>
+          <text class="d-t" x="300" y="103">Topic matches the filter?</text>
+          <text class="d-l" x="300" y="119">telematics/+/telemetry</text>
+          <line class="d-line" x1="450" y1="106" x2="486" y2="106" marker-end="url(#a2)"/>
+          <text class="d-l" x="468" y="99">no</text>
+          <rect class="d-no" x="490" y="84" width="140" height="44" rx="8"/>
+          <text class="d-t2" x="560" y="102">Never reaches API</text>
+          <text class="d-s" x="560" y="118">broker still accepts it</text>
+          <line class="d-line" x1="300" y1="128" x2="300" y2="152" marker-end="url(#a2)"/>
+          <text class="d-l d-start" x="308" y="145">yes</text>
+
+          <rect class="d-box" x="150" y="156" width="300" height="44" rx="22"/>
+          <text class="d-t" x="300" y="183">Payload is a JSON object?</text>
+          <line class="d-line" x1="450" y1="178" x2="486" y2="178" marker-end="url(#a2)"/>
+          <text class="d-l" x="468" y="171">no</text>
+          <rect class="d-no" x="490" y="156" width="140" height="44" rx="8"/>
+          <text class="d-t2" x="560" y="174">Logged + dropped</text>
+          <text class="d-s" x="560" y="190">plain text, bad JSON</text>
+          <line class="d-line" x1="300" y1="200" x2="300" y2="224" marker-end="url(#a2)"/>
+          <text class="d-l d-start" x="308" y="217">yes</text>
+
+          <rect class="d-box" x="150" y="228" width="300" height="44" rx="22"/>
+          <text class="d-t" x="300" y="247">All fields valid?</text>
+          <text class="d-s" x="300" y="263">ts in seconds · lat · lng · ranges</text>
+          <line class="d-line" x1="450" y1="250" x2="486" y2="250" marker-end="url(#a2)"/>
+          <text class="d-l" x="468" y="243">no</text>
+          <rect class="d-no" x="490" y="228" width="140" height="44" rx="8"/>
+          <text class="d-t2" x="560" y="246">Logged + dropped</text>
+          <text class="d-s" x="560" y="262">names field and value</text>
+          <line class="d-line" x1="300" y1="272" x2="300" y2="296" marker-end="url(#a2)"/>
+          <text class="d-l d-start" x="308" y="289">yes</text>
+
+          <rect class="d-box" x="150" y="300" width="300" height="44" rx="22"/>
+          <text class="d-t" x="300" y="327">IMEI registered and active?</text>
+          <line class="d-line" x1="450" y1="322" x2="486" y2="322" marker-end="url(#a2)"/>
+          <text class="d-l" x="468" y="315">no</text>
+          <rect class="d-no" x="490" y="300" width="140" height="44" rx="8"/>
+          <text class="d-t2" x="560" y="318">Logged + ignored</text>
+          <text class="d-s" x="560" y="334">"Unknown imei"</text>
+          <line class="d-line" x1="300" y1="344" x2="300" y2="368" marker-end="url(#a2)"/>
+          <text class="d-l d-start" x="308" y="361">yes</text>
+
+          <rect class="d-ok" x="150" y="372" width="300" height="52" rx="8"/>
+          <text class="d-t" x="300" y="394">Save reading + set last_seen_at</text>
+          <text class="d-s" x="300" y="412">one database transaction</text>
+          <line class="d-line" x1="300" y1="424" x2="300" y2="448" marker-end="url(#a2)"/>
+
+          <rect class="d-box" x="150" y="452" width="300" height="52" rx="8"/>
+          <text class="d-t" x="300" y="474">Readable over REST</text>
+          <text class="d-l" x="300" y="492">GET /devices/:id/telemetry/latest</text>
+        </svg>
+      </div>
+      <figcaption>The first check happens at the broker: a message on any other topic is accepted by the broker but never delivered to our API, so it leaves no log line. The other three checks write a warning in the API terminal that names the reason.</figcaption>
+    </figure>
+  </section>
+
+  <section id="code">
+    <span class="eyebrow">Part 6</span>
+    <h2>Where each idea lives in the code</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Concept</th><th>Where it lives</th></tr></thead>
+        <tbody>
+          <tr><td>Broker address</td><td><code>MQTT_URL</code> in <code>.env</code></td></tr>
+          <tr><td>Topic to subscribe to</td><td><code>MQTT_TOPIC_FILTER</code> in <code>.env</code>, read by <code>src/mqtt/mqtt.constants.ts</code></td></tr>
+          <tr><td>Subscribing</td><td><code>src/modules/telemetry/telemetry-mqtt.controller.ts</code> (<code>@EventPattern</code>)</td></tr>
+          <tr><td>Checking the message</td><td><code>src/modules/telemetry/dto/telemetry-payload.dto.ts</code></td></tr>
+          <tr><td>Saving it</td><td><code>TelemetryService.ingest()</code> in <code>telemetry.service.ts</code></td></tr>
+          <tr><td>Reading it back</td><td><code>GET /api/devices/:id/telemetry/latest</code></td></tr>
+          <tr><td>Error responses</td><td><code>src/common/filters/all-exceptions.filter.ts</code></td></tr>
+          <tr><td>Success shape and IST times</td><td><code>src/common/interceptors/response.interceptor.ts</code>, <code>APP_TIMEZONE</code> in <code>.env</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="check">
+    <span class="eyebrow">Part 7</span>
+    <h2>How to check everything now</h2>
+    <p>Work through these in order. Each step says what you should see. Replace <code>localhost</code> with <code>192.168.1.86</code> when testing from another machine.</p>
+
+    <ol class="steps">
+      <li>
+        <h3>Start the API</h3>
+        <p>In VS Code: <code>npm run start:local:win</code></p>
+        <p class="expect"><strong>Expect</strong> the last log lines to include <code>HTTP listening on http://192.168.1.86:3000/api</code> and <code>MQTT subscribed to telematics/+/telemetry</code>. Keep this terminal open; if you see the <code>PS C:\…&gt;</code> prompt again, the app has stopped.</p>
+      </li>
+      <li>
+        <h3>Check health</h3>
+        <pre>GET http://localhost:3000/api/health</pre>
+        <p class="expect"><strong>Expect</strong> <code>{"status":200,"message":"OK","data":{"db":"up","mqtt":"up"}}</code></p>
+      </li>
+      <li>
+        <h3>Open Swagger</h3>
+        <p><a href="http://localhost:3000/api/docs" target="_blank" rel="noopener">http://localhost:3000/api/docs</a> (teammates: <code>http://192.168.1.86:3000/api/docs</code>)</p>
+        <p class="expect"><strong>Expect</strong> Health, Devices and Telemetry groups. Swagger covers the REST side only; MQTT is documented on this page.</p>
+      </li>
+      <li>
+        <h3>Register a device</h3>
+        <pre>POST http://localhost:3000/api/devices
+{ "imei": "860000000000001", "name": "Truck 01" }</pre>
+        <p class="expect"><strong>Expect</strong> <code>201</code> with the new device and its <code>id</code>. Sending the same IMEI again gives <code>409 CONFLICT</code>, which proves the error handler works.</p>
+      </li>
+      <li>
+        <h3>Connect Postman as a fake device</h3>
+        <p>New → MQTT. URL <code>mqtt://broker.hivemq.com:1883</code>. In Settings, give it a unique Client ID such as <code>postman-yourname-01</code>. Click Connect.</p>
+        <p class="expect"><strong>Expect</strong> "Connected to broker" and the status <strong>stays</strong> Connected.</p>
+      </li>
+      <li>
+        <h3>Publish a reading</h3>
+        <p>Type the topic <strong>by hand</strong> in the box next to Send: <code>telematics/860000000000001/telemetry</code>. Message:</p>
+        <pre>{ "ts": {{$timestamp}}, "lat": 13.0827, "lng": 80.2707, "spd": 42, "hdg": 180, "ign": 1, "odo": 12345.6, "fuel": 56 }</pre>
+        <p class="expect"><strong>Expect</strong> an orange ↑ Sent line, and the status still Connected. Keep <code>{{$timestamp}}</code> without quotes. For MQTTX, which has no <code>{{$timestamp}}</code>, use this payload with the current time:</p>
+        <div class="payload">
+          <pre id="payload-text"></pre>
+          <div class="payload-bar">
+            <button type="button" id="copy-btn">Copy payload</button>
+            <button type="button" id="refresh-btn">Use current time</button>
+            <span class="status" id="copy-status" aria-live="polite"></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <h3>Confirm it was saved</h3>
+        <pre>GET http://localhost:3000/api/devices/1/telemetry?limit=5
+GET http://localhost:3000/api/devices/1</pre>
+        <p class="expect"><strong>Expect</strong> a new item whose <code>recorded_at</code> matches when you pressed Send, in IST (ending <code>+05:30</code>), and <code>last_seen_at</code> on the device updated. This is the real proof; a Sent line in Postman only proves the broker got it.</p>
+      </li>
+      <li>
+        <h3>Read the API terminal</h3>
+        <p class="expect"><strong>Expect</strong> no new warning. If the API rejected a message, there is a line such as <code>telematics/860000000000001/telemetry rejected: … (received ts=…)</code> that names the reason.</p>
+      </li>
+    </ol>
+
+    <h3>When something does not work</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What you see</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>Postman: <code>Connection refused</code></td><td>The API is not running</td><td>Run <code>npm run start:local:win</code> again</td></tr>
+          <tr><td>Postman MQTT disconnects right after Send or Subscribe</td><td>The topic has a hidden line break from copy-paste, or contains <code>+</code> or <code>#</code></td><td>Clear the topic box and type it by hand</td></tr>
+          <tr><td>Sent line appears but nothing is saved, no log line</td><td>Topic does not match: for example it ends in <code>telematics</code> instead of <code>telemetry</code>, or Postman and the API use different brokers</td><td>Topic must be <code>telematics/{imei}/telemetry</code>; broker must match <code>MQTT_URL</code></td></tr>
+          <tr><td>Log: <code>Unknown imei …</code></td><td>Device not registered, or inactive</td><td>Do step 4 with that IMEI</td></tr>
+          <tr><td>Log: <code>ts must be …</code></td><td><code>ts</code> is milliseconds (13 digits), text, a date string, or an old value</td><td>Use <code>{{$timestamp}}</code> without quotes, or the payload above</td></tr>
+          <tr><td>Log: <code>payload is not a JSON object</code></td><td>Plain text such as "Hi this is my testing"</td><td>Send the JSON payload</td></tr>
+          <tr><td>Health shows <code>"mqtt":"down"</code></td><td>Broker unreachable, or the app just restarted</td><td>Wait a few seconds; the API reconnects every 5 seconds</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <span class="note-title">Public broker</span>
+      <p><code>broker.hivemq.com</code> is open to anyone, and anyone can read or publish on any topic. Use it only for test data, never for real vehicle locations. Do not use <code>test.mosquitto.org</code>: it is blocked on the office network.</p>
+    </div>
+  </section>
+
+  <section id="production">
+    <span class="eyebrow">Part 8</span>
+    <h2>Full production architecture</h2>
+    <p>Where this base is heading. Solid boxes exist in the code today; dashed boxes are planned. The core path from tracker to database is already the real one; production mostly adds a private broker, live data and alerts around it.</p>
+
+    <figure>
+      <div class="diagram">
+        <svg viewBox="0 0 920 520" role="img" aria-label="Production architecture. Vehicle trackers publish to a private MQTT broker cluster. The ingest service receives readings, stores history in PostgreSQL or TimescaleDB, writes the latest position to Redis, and emits events to a rules engine that triggers notifications. The API service reads Redis and PostgreSQL and serves the dashboard and mobile app; it also sends commands back to trackers through the broker.">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="d-arrow" d="M0 0L10 5L0 10z"/>
+            </marker>
+            <marker id="a3c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="d-arrow-acc" d="M0 0L10 5L0 10z"/>
+            </marker>
+          </defs>
+
+          <text class="d-k" x="20" y="30">VEHICLES</text>
+          <text class="d-k" x="240" y="30">MESSAGING</text>
+          <text class="d-k" x="470" y="30">PROCESSING</text>
+          <text class="d-k" x="720" y="30">DATA AND ACCESS</text>
+
+          <rect class="d-ext" x="20" y="70" width="150" height="120" rx="8"/>
+          <text class="d-t" x="95" y="118">Vehicle trackers</text>
+          <text class="d-s" x="95" y="136">GPS · ignition · fuel</text>
+          <text class="d-s" x="95" y="154">1 reading every 5 s</text>
+
+          <rect class="d-box d-acc d-plan" x="240" y="70" width="160" height="120" rx="8"/>
+          <text class="d-t" x="320" y="112">MQTT broker cluster</text>
+          <text class="d-s" x="320" y="130">private · TLS on 8883</text>
+          <text class="d-s" x="320" y="148">login per device</text>
+          <text class="d-s" x="320" y="166">POC: public HiveMQ</text>
+
+          <line class="d-line" x1="170" y1="100" x2="236" y2="100" marker-end="url(#a3)"/>
+          <text class="d-l" x="205" y="92">publish</text>
+          <line class="d-cmd" x1="240" y1="165" x2="174" y2="165" marker-end="url(#a3c)"/>
+          <text class="d-l" x="205" y="157">commands</text>
+
+          <rect class="d-box" x="470" y="60" width="180" height="60" rx="8"/>
+          <text class="d-t" x="560" y="86">Ingest service</text>
+          <text class="d-s" x="560" y="104">validate · dedupe (later)</text>
+          <line class="d-line" x1="400" y1="90" x2="466" y2="90" marker-end="url(#a3)"/>
+          <text class="d-l" x="433" y="82">deliver</text>
+
+          <rect class="d-box" x="720" y="60" width="180" height="60" rx="8"/>
+          <text class="d-t" x="810" y="86">PostgreSQL</text>
+          <text class="d-s" x="810" y="104">full history · TimescaleDB later</text>
+          <line class="d-line" x1="650" y1="80" x2="716" y2="80" marker-end="url(#a3)"/>
+          <text class="d-l" x="683" y="72">store</text>
+
+          <rect class="d-box d-plan" x="720" y="180" width="150" height="60" rx="8"/>
+          <text class="d-t" x="795" y="206">Redis</text>
+          <text class="d-s" x="795" y="224">latest position per vehicle</text>
+          <path class="d-line" d="M650 105 H690 V210 H716" marker-end="url(#a3)"/>
+          <text class="d-l d-start" x="696" y="160">latest</text>
+
+          <rect class="d-box d-plan" x="470" y="200" width="180" height="60" rx="8"/>
+          <text class="d-t" x="560" y="226">Rules engine</text>
+          <text class="d-s" x="560" y="244">geofence · overspeed · idling</text>
+          <line class="d-line" x1="560" y1="120" x2="560" y2="196" marker-end="url(#a3)"/>
+          <text class="d-l d-start" x="568" y="162">events</text>
+
+          <rect class="d-box d-plan" x="470" y="340" width="180" height="60" rx="8"/>
+          <text class="d-t" x="560" y="366">Notifications</text>
+          <text class="d-s" x="560" y="384">SMS · push · email</text>
+          <line class="d-line" x1="560" y1="260" x2="560" y2="336" marker-end="url(#a3)"/>
+          <text class="d-l d-start" x="568" y="302">alerts</text>
+
+          <rect class="d-box" x="720" y="300" width="180" height="60" rx="8"/>
+          <text class="d-t" x="810" y="326">API service</text>
+          <text class="d-s" x="810" y="344">REST · WebSocket · JWT</text>
+          <line class="d-line" x1="795" y1="300" x2="795" y2="244" marker-end="url(#a3)"/>
+          <text class="d-l d-start" x="803" y="276">reads</text>
+          <line class="d-line" x1="885" y1="300" x2="885" y2="124" marker-end="url(#a3)"/>
+          <text class="d-l d-end" x="880" y="160">reads</text>
+
+          <rect class="d-ext" x="720" y="440" width="180" height="60" rx="8"/>
+          <text class="d-t" x="810" y="466">Dashboard · mobile app</text>
+          <text class="d-s" x="810" y="484">fleet managers</text>
+          <line class="d-line" x1="810" y1="440" x2="810" y2="364" marker-end="url(#a3)"/>
+          <text class="d-l d-start" x="818" y="406">HTTPS · live</text>
+
+          <path class="d-cmd" d="M720 330 H700 V470 H320 V194" marker-end="url(#a3c)"/>
+          <text class="d-l" x="510" y="462">command · telematics/{imei}/cmd</text>
+        </svg>
+      </div>
+      <figcaption>Readings flow left to right; commands (dashed teal) flow back from the API through the broker to the tracker. Today the ingest service, PostgreSQL and the REST part of the API service exist in one NestJS process. WebSocket live updates, JWT login, deduplication and the dashed components are planned. Trackers that cannot speak MQTT JSON connect through a protocol gateway in front of the broker.</figcaption>
+    </figure>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Job</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>MQTT broker cluster</td><td>Private broker (EMQX or HiveMQ) with TLS and one login per device</td><td>Planned (POC uses public HiveMQ)</td></tr>
+          <tr><td>Ingest service</td><td>Validate, deduplicate and store readings</td><td>Built, dedupe planned</td></tr>
+          <tr><td>PostgreSQL / TimescaleDB</td><td>Full history of every reading</td><td>Built on PostgreSQL</td></tr>
+          <tr><td>Redis</td><td>Latest position per vehicle for fast live maps</td><td>Planned</td></tr>
+          <tr><td>Rules engine</td><td>Geofence, overspeed, idling, fuel drop detection</td><td>Planned</td></tr>
+          <tr><td>Notifications</td><td>Send alerts by SMS, push or email</td><td>Planned</td></tr>
+          <tr><td>API service</td><td>REST for data, WebSocket for live tracking, JWT login</td><td>REST built</td></tr>
+          <tr><td>Protocol gateway</td><td>Convert binary tracker protocols into our JSON</td><td>Only if devices need it</td></tr>
+          <tr><td>Monitoring</td><td>Logs, metrics, alerts when ingest stops</td><td>Planned</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="gaps">
+    <span class="eyebrow">Before production</span>
+    <h2>Known gaps</h2>
+    <ul class="gaps">
+      <li><strong>No duplicate handling.</strong> With QoS 1 the same reading can be stored twice. The fix is a unique key on device and timestamp, with duplicate inserts ignored.</li>
+      <li><strong>Public broker without login.</strong> Production needs a private broker with a username and password per device, plus TLS.</li>
+      <li><strong>No API login.</strong> The REST endpoints have no authentication yet (JWT is planned).</li>
+      <li><strong>No commands to devices.</strong> The <code>telematics/{imei}/cmd</code> topic is not built yet.</li>
+      <li><strong>Plain PostgreSQL for telemetry.</strong> Large fleets will need a time-series setup such as TimescaleDB.</li>
+    </ul>
+  </section>
+
+  <footer>Payload rules: ts is current Unix time in seconds (10 digits), within the last 30 days and at most 5 minutes ahead; lat −90 to 90; lng −180 to 180; spd ≥ 0; hdg 0–359; ign 0 or 1; odo ≥ 0; fuel 0–100. Only ts, lat and lng are required. API times are returned in IST (+05:30) and stored in UTC.</footer>
+</main>
+
+<script>
+  (function () {
+    var pre = document.getElementById('payload-text');
+    var status = document.getElementById('copy-status');
+
+    function render() {
+      var payload = { ts: Math.floor(Date.now() / 1000), lat: 13.0827, lng: 80.2707, spd: 42, hdg: 180, ign: 1, odo: 12345.6, fuel: 56 };
+      pre.textContent = JSON.stringify(payload);
+    }
+
+    function selectPayload() {
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', function () {
+      render();
+      status.textContent = 'Timestamp updated.';
+    });
+
+    document.getElementById('copy-btn').addEventListener('click', function () {
+      var text = pre.textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          status.textContent = 'Copied.';
+        }, function () {
+          selectPayload();
+          status.textContent = 'Selected. Press Ctrl+C to copy.';
+        });
+      } else {
+        selectPayload();
+        status.textContent = 'Selected. Press Ctrl+C to copy.';
+      }
+    });
+
+    render();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 - HiveMQ vs Mosquitto: Standards, 25 Device Cap, Cost & Decision Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #0b0f19;
+    --surface: #131a29;
+    --surface-card: #1c263c;
+    --border: #28354f;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --primary: #3b82f6;
+    --primary-light: #60a5fa;
+    --primary-glow: rgba(59, 130, 246, 0.15);
+    --hivemq-gold: #f59e0b;
+    --mosquitto-teal: #06b6d4;
+    --accent-emerald: #10b981;
+    --accent-rose: #f43f5e;
+    --font-main: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-main);
+    line-height: 1.65;
+    padding: 30px 20px 80px;
+  }
+  .container { max-width: 1140px; margin: 0 auto; }
+  
+  .badge {
+    display: inline-block;
+    padding: 4px 14px;
+    background: var(--primary-glow);
+    border: 1px solid var(--primary-light);
+    color: var(--primary-light);
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 34px; font-weight: 800; line-height: 1.25; margin-bottom: 12px; color: #ffffff; }
+  .lead { font-size: 17px; color: var(--text-muted); margin-bottom: 36px; max-width: 920px; }
+  
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    margin-bottom: 32px;
+  }
+  h2 { font-size: 22px; font-weight: 700; color: #ffffff; margin-bottom: 18px; display: flex; align-items: center; gap: 12px; }
+  h2 span.num {
+    background: var(--primary);
+    color: #fff;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 17px; font-weight: 700; color: #e2e8f0; margin: 20px 0 10px; }
+  p { margin-bottom: 16px; color: var(--text); font-size: 15px; }
+
+  .diagram-box {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .diagram-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary-light);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 16px; }
+  @media(max-width: 820px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* Comparison Cards */
+  .brand-card {
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid var(--border);
+  }
+  .brand-hivemq {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(19, 26, 41, 0.6) 100%);
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+  .brand-mosquitto {
+    background: linear-gradient(180deg, rgba(6, 182, 212, 0.08) 0%, rgba(19, 26, 41, 0.6) 100%);
+    border-color: rgba(6, 182, 212, 0.3);
+  }
+  .brand-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .brand-title { font-size: 20px; font-weight: 800; }
+  .hivemq-color { color: var(--hivemq-gold); }
+  .mosquitto-color { color: var(--mosquitto-teal); }
+  
+  .stat-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .pill-amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+  .pill-teal { background: rgba(6, 182, 212, 0.2); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.4); }
+  .pill-rose { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); }
+  .pill-green { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+
+  /* Table styling */
+  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+  th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: rgba(255, 255, 255, 0.05); color: #ffffff; font-weight: 700; }
+  tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+  .callout-warning {
+    background: rgba(244, 63, 94, 0.08);
+    border-left: 4px solid var(--accent-rose);
+    padding: 18px 22px;
+    border-radius: 0 8px 8px 0;
+    margin: 20px 0;
+  }
+  .callout-warning strong { color: #fb7185; display: block; margin-bottom: 6px; font-size: 15px; }
+  .callout-warning p { margin: 0; color: #fecdd3; font-size: 14px; }
+
+  .callout-success {
+    background: rgba(16, 185, 129, 0.08);
+    border-left: 4px solid var(--accent-emerald);
+    padding: 18px 22px;
+    border-radius: 0 8px 8px 0;
+    margin: 20px 0;
+  }
+  .callout-success strong { color: #34d399; display: block; margin-bottom: 6px; font-size: 15px; }
+  .callout-success p { margin: 0; color: #d1fae5; font-size: 14px; }
+
+  code { font-family: var(--font-mono); background: rgba(0,0,0,0.4); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #93c5fd; }
+  pre {
+    background: #080c14;
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    margin: 16px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="badge">Architecture Document 02</div>
+  <h1>HiveMQ vs. Mosquitto: Standards, 25 Device Cap, Cost &amp; Decision Guide</h1>
+  <p class="lead">A complete architectural breakdown: first explaining what HiveMQ and Mosquitto are, what happens when you register and log into HiveMQ (the 25-connection &amp; 25-msg/s limit from your account screenshot), real-world fleet cost comparisons, which broker wins based on enterprise standards, and exactly what to proceed with.</p>
+
+  <!-- SECTION 1: WHAT IS HIVEMQ & WHAT IS MOSQUITTO -->
+  <div class="card">
+    <h2><span class="num">1</span> What is HiveMQ and What is Eclipse Mosquitto?</h2>
+    <p>In telematics, GPS trackers and web dashboards do not talk directly to each other. They connect to a central <strong>MQTT Broker</strong> (a real-time message switchboard). Both HiveMQ and Mosquitto implement the exact same international MQTT standards (OASIS MQTT 3.1.1 and MQTT 5.0), but they were built for very different engineering environments:</p>
+
+    <div class="grid-2">
+      <!-- HIVEMQ PROFILE -->
+      <div class="brand-card brand-hivemq">
+        <div class="brand-header">
+          <span class="brand-title hivemq-color">HiveMQ</span>
+          <span class="stat-pill pill-amber">ENTERPRISE JAVA BROKER</span>
+        </div>
+        <p><strong>Developed by:</strong> HiveMQ GmbH (Germany)</p>
+        <p><strong>Core Architecture:</strong> Written in <strong>Java</strong>, runs on the Java Virtual Machine (JVM). Engineered specifically for distributed cloud clustering across multiple availability zones and regions.</p>
+        <p><strong>Primary Strengths:</strong> Masterless distributed cluster architecture, enterprise Kafka plugins, high availability for 1,000,000+ devices, and managed cloud SaaS.</p>
+        <p><strong>Key Customers:</strong> Automotive giants like BMW, Audi, and Liberty Global.</p>
+      </div>
+
+      <!-- MOSQUITTO PROFILE -->
+      <div class="brand-card brand-mosquitto">
+        <div class="brand-header">
+          <span class="brand-title mosquitto-color">Eclipse Mosquitto</span>
+          <span class="stat-pill pill-teal">ULTRA-FAST C BINARY</span>
+        </div>
+        <p><strong>Developed by:</strong> Eclipse Foundation (Created by Roger Light)</p>
+        <p><strong>Core Architecture:</strong> Written in native <strong>C</strong>. An ultra-lightweight, high-speed single binary with zero external dependencies and a microscopic memory footprint.</p>
+        <p><strong>Primary Strengths:</strong> Consumes only <strong>8 MB to 15 MB of RAM</strong>, boots in under 50ms, 100% free open-source (EPL/EDL license), and easily runs on low-cost $4/mo cloud VPS instances or edge IoT gateways (Raspberry Pi).</p>
+        <p><strong>Key Users:</strong> Open-source IoT developers, fleet tracking systems, industrial telemetry gateways, and home automation.</p>
+      </div>
+    </div>
+
+    <!-- SHARED MQTT ARCHITECTURE DIAGRAM -->
+    <div class="diagram-box">
+      <div class="diagram-title">System Architecture: Both Brokers Act as Central Switchboards</div>
+      <svg viewBox="0 0 960 360" width="100%" height="auto" style="display:block; margin:auto;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="bShadow">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+          </filter>
+        </defs>
+
+        <!-- SENDER -->
+        <g transform="translate(30, 80)">
+          <rect width="210" height="200" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" filter="url(#bShadow)"/>
+          <text x="105" y="32" text-anchor="middle" fill="#38bdf8" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="13">PUBLISHER (VEHICLE)</text>
+          
+          <rect x="15" y="55" width="180" height="125" rx="6" fill="#0f172a"/>
+          <text x="25" y="80" fill="#f8fafc" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">🚗 4G GPS Tracker</text>
+          <text x="25" y="100" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="10">Sends Lat/Lng every 5s</text>
+          <text x="25" y="125" fill="#38bdf8" font-family="'JetBrains Mono', monospace" font-size="10">Topic: telematics/ID/telemetry</text>
+          <text x="25" y="145" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="10">QoS: 0 (Fire &amp; Forget)</text>
+          <text x="25" y="165" fill="#eab308" font-family="'JetBrains Mono', monospace" font-size="10">Retain: true</text>
+        </g>
+
+        <!-- BROKER (CENTER) -->
+        <g transform="translate(330, 45)">
+          <rect width="300" height="270" rx="12" fill="#182030" stroke="#3b82f6" stroke-width="2" filter="url(#bShadow)"/>
+          <rect width="300" height="38" rx="12" fill="#2563eb"/>
+          <text x="150" y="24" text-anchor="middle" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="13">MQTT BROKER (HiveMQ or Mosquitto)</text>
+
+          <rect x="20" y="55" width="260" height="60" rx="6" fill="#0f172a" stroke="#1d4ed8"/>
+          <text x="35" y="78" fill="#93c5fd" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="11">Topic Routing Engine</text>
+          <text x="35" y="96" fill="#cbd5e1" font-family="'JetBrains Mono', monospace" font-size="10">Matches telematics/+/telemetry</text>
+
+          <rect x="20" y="125" width="260" height="60" rx="6" fill="#0f172a" stroke="#eab308"/>
+          <text x="35" y="148" fill="#fde047" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="11">Retained Message Cache</text>
+          <text x="35" y="166" fill="#cbd5e1" font-family="'Plus Jakarta Sans', sans-serif" font-size="10">Holds last known position in memory</text>
+
+          <rect x="20" y="195" width="260" height="60" rx="6" fill="#0f172a" stroke="#10b981"/>
+          <text x="35" y="218" fill="#34d399" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="11">Connection &amp; Session Store</text>
+          <text x="35" y="236" fill="#cbd5e1" font-family="'Plus Jakarta Sans', sans-serif" font-size="10">Tracks client sessions &amp; PUBACKs</text>
+        </g>
+
+        <!-- RECEIVER -->
+        <g transform="translate(720, 80)">
+          <rect width="210" height="200" rx="10" fill="#1e293b" stroke="#10b981" stroke-width="1.5" filter="url(#bShadow)"/>
+          <text x="105" y="32" text-anchor="middle" fill="#34d399" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="13">SUBSCRIBERS (CONSUMERS)</text>
+          
+          <rect x="15" y="55" width="180" height="125" rx="6" fill="#0f172a"/>
+          <text x="25" y="80" fill="#a7f3d0" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">⚡ NestJS Backend API</text>
+          <text x="25" y="100" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="10">Persists to PostgreSQL</text>
+          <text x="25" y="125" fill="#f8fafc" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">🖥️ React Web App</text>
+          <text x="25" y="145" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="10">Moves Leaflet Map Pin</text>
+          <text x="25" y="165" fill="#34d399" font-family="'JetBrains Mono', monospace" font-size="10">Sub-5ms update latency</text>
+        </g>
+
+        <!-- FLOW ARROWS -->
+        <path d="M 240 180 L 330 180" stroke="#38bdf8" stroke-width="2.5" fill="none"/>
+        <polygon points="328,175 338,180 328,185" fill="#38bdf8"/>
+        <text x="285" y="170" text-anchor="middle" fill="#38bdf8" font-family="'JetBrains Mono', monospace" font-size="10">TCP 1883</text>
+
+        <path d="M 630 180 L 720 180" stroke="#10b981" stroke-width="2.5" fill="none"/>
+        <polygon points="718,175 728,180 718,185" fill="#10b981"/>
+        <text x="675" y="170" text-anchor="middle" fill="#10b981" font-family="'JetBrains Mono', monospace" font-size="10">PUSH</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- SECTION 2: WHAT HAPPENS WHEN WE LOG IN (THE SCREENSHOT EXPLAINED) -->
+  <div class="card">
+    <h2><span class="num">2</span> What Happens When You Log In to HiveMQ? (The 25 Device Cap)</h2>
+    <p>In your screenshot for account <strong>Ashraf Akram.N</strong> under cluster license <em>"Jolly Mason"</em>, HiveMQ provisioned a <strong>"Lab" Software License</strong>. Here is the operational reality of what that means:</p>
+
+    <div class="grid-2">
+      <div class="brand-card brand-hivemq">
+        <div class="brand-header">
+          <span class="brand-title hivemq-color">Your HiveMQ Lab License</span>
+          <span class="stat-pill pill-amber">HARD CAP: 25</span>
+        </div>
+        <ul style="margin-left: 20px; font-size: 14px; color: var(--text-muted); line-height: 1.8;">
+          <li><strong>Concurrent Connections:</strong> <span style="color:#fbbf24; font-weight:700;">25 devices max</span></li>
+          <li><strong>Message Throughput:</strong> <span style="color:#fbbf24; font-weight:700;">25 messages / second max</span></li>
+          <li><strong>Package Type:</strong> Lab / Evaluation Only</li>
+          <li><strong>Data Transfer:</strong> 10 GB per month</li>
+        </ul>
+      </div>
+
+      <div class="brand-card brand-mosquitto">
+        <div class="brand-header">
+          <span class="brand-title mosquitto-color">Self-Hosted Mosquitto</span>
+          <span class="stat-pill pill-green">NO LIMIT: &infin;</span>
+        </div>
+        <ul style="margin-left: 20px; font-size: 14px; color: var(--text-muted); line-height: 1.8;">
+          <li><strong>Concurrent Connections:</strong> <span style="color:#34d399; font-weight:700;">Unlimited (10,000+ on $5 VPS)</span></li>
+          <li><strong>Message Throughput:</strong> <span style="color:#34d399; font-weight:700;">50,000+ messages / second</span></li>
+          <li><strong>Package Type:</strong> 100% Free Open Source (EPL/EDL)</li>
+          <li><strong>Data Transfer:</strong> Bounded only by your cloud VPS (1000+ GB)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- WHAT HAPPENS TO DEVICE 26 SVG FLOWCHART -->
+    <div class="diagram-box">
+      <div class="diagram-title">Flowchart: What Happens When Device #26 Connects to HiveMQ vs Mosquitto</div>
+      <svg viewBox="0 0 960 400" width="100%" height="auto" style="display:block; margin:auto;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="fShadow2">
+            <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.5"/>
+          </filter>
+        </defs>
+
+        <!-- TOP BAR: 25 Active Vehicles Streaming -->
+        <g transform="translate(30, 20)">
+          <rect width="900" height="50" rx="8" fill="#1e293b" stroke="#3b82f6" filter="url(#fShadow2)"/>
+          <text x="450" y="31" text-anchor="middle" fill="#60a5fa" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="13">FLEET STATUS: VEHICLES 1 TO 25 ARE CONNECTED &bull; 25/25 SLOTS FULL (100%)</text>
+        </g>
+
+        <!-- NEW EVENT: TRUCK #26 TURNS ON IGNITION -->
+        <g transform="translate(30, 85)">
+          <rect width="900" height="45" rx="8" fill="#2d1c16" stroke="#f97316"/>
+          <text x="450" y="28" text-anchor="middle" fill="#fdba74" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">🚨 NEW EVENT: Vehicle #26 (Tipper Truck &bull; IMEI: 864201992019286) Turns on Ignition and Sends CONNECT</text>
+        </g>
+
+        <!-- SPLIT PATH LEFT: HIVEMQ FREE / LAB TIER -->
+        <g transform="translate(30, 150)">
+          <rect width="435" height="225" rx="10" fill="#24181c" stroke="#f43f5e" stroke-width="1.5" filter="url(#fShadow2)"/>
+          <rect width="435" height="34" rx="10" fill="#e11d48"/>
+          <text x="217" y="22" text-anchor="middle" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="13">SCENARIO A: ON HIVEMQ LAB (25 CAP)</text>
+
+          <text x="20" y="60" fill="#fca5a5" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">1. HiveMQ Enforces License Check:</text>
+          <text x="20" y="78" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="11">Current Connections (25) &gt;= Max Allowed (25)</text>
+
+          <rect x="20" y="95" width="395" height="50" rx="6" fill="#38131d" stroke="#f43f5e"/>
+          <text x="217" y="116" text-anchor="middle" fill="#fda4af" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="11">❌ CONNACK 0x05: Connection Refused</text>
+          <text x="217" y="132" text-anchor="middle" fill="#fecdd3" font-family="'JetBrains Mono', monospace" font-size="10">Reason: "Maximum client limit reached"</text>
+
+          <text x="20" y="168" fill="#cbd5e1" font-family="'Plus Jakarta Sans', sans-serif" font-size="11"><strong>Business Impact:</strong> Vehicle #26 goes completely dark! The dispatcher cannot see its GPS location, emergency alerts fail, and you must upgrade to an expensive enterprise tier.</text>
+        </g>
+
+        <!-- SPLIT PATH RIGHT: MOSQUITTO SELF-HOSTED -->
+        <g transform="translate(495, 150)">
+          <rect width="435" height="225" rx="10" fill="#142423" stroke="#10b981" stroke-width="1.5" filter="url(#fShadow2)"/>
+          <rect width="435" height="34" rx="10" fill="#059669"/>
+          <text x="217" y="22" text-anchor="middle" fill="#ffffff" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="13">SCENARIO B: ON SELF-HOSTED MOSQUITTO</text>
+
+          <text x="20" y="60" fill="#a7f3d0" font-family="'Plus Jakarta Sans', sans-serif" font-weight="700" font-size="12">1. Mosquitto Accepts Connection:</text>
+          <text x="20" y="78" fill="#94a3b8" font-family="'JetBrains Mono', monospace" font-size="11">C Native Event Loop accepts client in 0.02ms</text>
+
+          <rect x="20" y="95" width="395" height="50" rx="6" fill="#0d2822" stroke="#10b981"/>
+          <text x="217" y="116" text-anchor="middle" fill="#6ee7b7" font-family="'JetBrains Mono', monospace" font-weight="700" font-size="11">✔ CONNACK 0x00: Connection Accepted</text>
+          <text x="217" y="132" text-anchor="middle" fill="#a7f3d0" font-family="'JetBrains Mono', monospace" font-size="10">RAM Used: +8 Kilobytes only! Total RAM: ~9.2 MB</text>
+
+          <text x="20" y="168" fill="#cbd5e1" font-family="'Plus Jakarta Sans', sans-serif" font-size="11"><strong>Business Impact:</strong> Vehicle #26 instantly streams coordinates to your Leaflet map. You can connect 100, 500, or 5,000 more vehicles without paying a single extra penny.</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- SECTION 3: COST COMPARISON -->
+  <div class="card">
+    <h2><span class="num">3</span> Commercial Cost Comparison: HiveMQ Cloud vs. Self-Hosted Mosquitto</h2>
+    <p>When operating a real telematics fleet where vehicles report GPS coordinates every 5 seconds, message volumes multiply rapidly. Here is the cost reality across different fleet sizes:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Fleet Size</th>
+          <th>Monthly GPS Messages (5s ping)</th>
+          <th>HiveMQ Cloud Cost</th>
+          <th>Self-Hosted Mosquitto ($5 VPS)</th>
+          <th>Annual Savings</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>10 Vehicles</strong></td>
+          <td>5.1 Million msgs/mo</td>
+          <td><span class="stat-pill pill-green">$0 (Within 25 limit)</span></td>
+          <td><span class="stat-pill pill-teal">$5 / month</span> (Cloud VPS)</td>
+          <td>Similar cost</td>
+        </tr>
+        <tr>
+          <td><strong>25 Vehicles</strong></td>
+          <td>13 Million msgs/mo</td>
+          <td><span class="stat-pill pill-green">$0 (Exact limit reached)</span></td>
+          <td><span class="stat-pill pill-teal">$5 / month</span> (Cloud VPS)</td>
+          <td>Similar cost</td>
+        </tr>
+        <tr>
+          <td><strong>50 Vehicles</strong></td>
+          <td>26 Million msgs/mo</td>
+          <td><span class="stat-pill pill-amber">~$39 - $80 / month</span> (Starter Tier)</td>
+          <td><span class="stat-pill pill-teal">$5 / month</span></td>
+          <td><strong style="color:#34d399;">Save ~$400 - $900 / yr</strong></td>
+        </tr>
+        <tr>
+          <td><strong>250 Vehicles</strong></td>
+          <td>130 Million msgs/mo</td>
+          <td><span class="stat-pill pill-rose">~$250 - $450 / month</span></td>
+          <td><span class="stat-pill pill-teal">$5 / month</span> (1GB RAM is plenty!)</td>
+          <td><strong style="color:#34d399;">Save ~$3,000 - $5,000 / yr</strong></td>
+        </tr>
+        <tr>
+          <td><strong>1,000 Vehicles</strong></td>
+          <td>518 Million msgs/mo</td>
+          <td><span class="stat-pill pill-rose">$1,200+ / mo or Enterprise Contract ($20k+/yr)</span></td>
+          <td><span class="stat-pill pill-teal">$10 / month</span> (2GB RAM VPS)</td>
+          <td><strong style="color:#34d399;">Save $14,000 - $25,000 / yr</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout-warning">
+      <strong>The 25 msg/s Throughput Trap:</strong>
+      <p>Notice the second restriction in your screenshot: <code>Throughput: 25 msg/s</code>. Even if you only have 15 vehicles, if each vehicle sends GPS pings every 1 second or triggers rapid burst sensor telemetry during acceleration or braking, 15 vehicles will easily exceed 25 messages per second, causing HiveMQ to drop packets!</p>
+    </div>
+  </div>
+
+  <!-- SECTION 4: WHICH IS BETTER BASED ON STANDARDS -->
+  <div class="card">
+    <h2><span class="num">4</span> Which is Better Based on Technical Standards?</h2>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Standard / Capability</th>
+          <th>Eclipse Mosquitto</th>
+          <th>HiveMQ</th>
+          <th>Technical Winner</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>MQTT 3.1.1 &amp; 5.0 OASIS Standards</strong></td>
+          <td>100% compliant</td>
+          <td>100% compliant</td>
+          <td><span class="stat-pill pill-green">Tie (Both speak standard MQTT)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Memory Footprint</strong></td>
+          <td><span class="stat-pill pill-teal">8 MB - 15 MB</span> (Native C)</td>
+          <td><span class="stat-pill pill-amber">500 MB - 2 GB</span> (JVM Heap)</td>
+          <td><span class="stat-pill pill-green">Mosquitto (100x more efficient)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Multi-Cloud Distributed Clustering</strong></td>
+          <td>Single-node &bull; Bridging supported</td>
+          <td><span class="stat-pill pill-teal">Masterless Distributed Cluster</span></td>
+          <td><span class="stat-pill pill-green">HiveMQ (Best for global 500k+ fleets)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Licensing &amp; Vendor Lock-In</strong></td>
+          <td>100% Free Open Source (EPL/EDL)</td>
+          <td>Proprietary commercial license</td>
+          <td><span class="stat-pill pill-green">Mosquitto (Zero paywalls)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Local Docker Colocation Latency</strong></td>
+          <td><strong>&lt;0.5ms</strong> (Internal virtual bridge)</td>
+          <td>80ms - 150ms (Internet hops to cloud)</td>
+          <td><span class="stat-pill pill-green">Mosquitto (Instantaneous)</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SECTION 5: WHAT SHOULD WE PROCEED WITH -->
+  <div class="card">
+    <h2><span class="num">5</span> Strategic Decision: What Should We Proceed With?</h2>
+    <p>Based on commercial feasibility, engineering standards, and system architecture, here is the exact progression for our telematics platform:</p>
+
+    <div class="grid-3">
+      <div class="brand-card" style="background:#111827; border-color:#334155;">
+        <span class="stat-pill pill-amber">PHASE 1: PROTOTYPE (DONE)</span>
+        <h3 style="color:#ffffff; margin-top:10px;">HiveMQ Public Sandbox</h3>
+        <p style="font-size:13px; color:var(--text-muted);">We used <code>broker.hivemq.com</code> to immediately build and test the NestJS backend and React 19 Leaflet map with zero server setup cost.</p>
+      </div>
+
+      <div class="brand-card" style="background:#111827; border-color:#334155;">
+        <span class="stat-pill pill-teal">PHASE 2: INTERNAL TESTING</span>
+        <h3 style="color:#ffffff; margin-top:10px;">HiveMQ Lab License</h3>
+        <p style="font-size:13px; color:var(--text-muted);">Your registered Lab cluster (25 connections) can be used for team QA and sandbox staging with up to 25 test devices.</p>
+      </div>
+
+      <div class="brand-card" style="background:#111827; border-color:#10b981;">
+        <span class="stat-pill pill-green">PHASE 3: PRODUCTION (FINAL)</span>
+        <h3 style="color:#34d399; margin-top:10px;">Self-Hosted Mosquitto Cloud</h3>
+        <p style="font-size:13px; color:var(--text-muted);">Deploy our own Mosquitto container on AWS / DigitalOcean ($5/mo). We get unlimited devices, encrypted password authentication, sub-millisecond database colocation, and zero 3rd-party vendor fees!</p>
+      </div>
+    </div>
+
+    <div class="callout-success" style="margin-top:24px;">
+      <strong>Final Verdict:</strong>
+      <p>Proceed with <strong>Self-Hosted Mosquitto on your cloud server</strong> for all commercial fleet deployments. It eliminates the 25-device cap, secures vehicle coordinates inside your private cloud, and keeps hosting costs fixed at ~$5/month flat.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
